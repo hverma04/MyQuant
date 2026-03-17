@@ -36,11 +36,11 @@ with col_logo:
     # Stylized text logo that defines the Kern brand
     st.markdown("""
         <h1 style="
-            font-family: 'serif'; 
+            font-family: 'times new roman', serif; 
             color: #bfa15d; 
-            font-size: 5rem; 
-            margin-top: -10px;
-            letter-spacing: 2px;
+            font-size: 3rem; 
+            margin-top: 10px;
+            letter-spacing: 1px;
         ">KERN<span style="color: #bfa15d;">.</span></h1>
     """, unsafe_allow_html=True)
 
@@ -61,8 +61,8 @@ def fetch_ticker_resource(symbol):
 
 #  SIDEBAR / INPUTS 
 with st.sidebar:
-    st.header("Trade Parameters")
-    ticker_input = st.text_input("Ticker Symbol", value="NVDA").upper()
+    st.header("KERN | Market Research\nTrade Parameters")
+    ticker_input = st.text_input("Ticker Symbol", value="Enter Ticker Here").upper()
     
     ticker, expirations, spot_price = fetch_ticker_resource(ticker_input)
 
