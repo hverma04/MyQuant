@@ -5,11 +5,10 @@ import numpy as np
 from scipy.stats import norm
 import matplotlib.pyplot as plt
 import os
-#HOW TO RUN = python -m streamlit run Automated_Portfolio_Manager/MyQuantMain.py 
+#HOW TO RUN = python -m streamlit run MyQuant/MyQuantMain.py 
 st.set_page_config(page_title="Kern | MyQuant", layout="wide")
 
-# --- CUSTOM CSS (Cleaned Up) ---
-# We only use this for specific component styling now, not colors.
+#CUSTOM CSS FOR STYLING THE DASHBOARD
 st.markdown("""
     <style>
     /* Metric Cards */
@@ -31,10 +30,10 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- APP HEADER ---
+# APP HEADER 
 col_logo, col_title = st.columns([1, 4])
 with col_logo:
-    # Stylized text logo that mimics the Kern brand
+    # Stylized text logo that defines the Kern brand
     st.markdown("""
         <h1 style="
             font-family: 'serif'; 
@@ -47,11 +46,11 @@ with col_logo:
 
 with col_title:
     st.title("MyQuant | Advanced Options Analysis")
-    st.write("Institutional-grade probability modeling and trade simulation.")
+    st.write("Institutional-grade probability modeling. Built for the Retail Investor.")
 
 st.divider()
 
-# --- DATA CACHING ---
+#  DATA CACHING 
 @st.cache_resource(ttl=3600)
 def fetch_ticker_resource(symbol):
     t = yf.Ticker(symbol)
@@ -60,7 +59,7 @@ def fetch_ticker_resource(symbol):
         return None, None, None
     return t, t.options, hist["Close"].iloc[0]
 
-# --- SIDEBAR / INPUTS ---
+#  SIDEBAR / INPUTS 
 with st.sidebar:
     st.header("Trade Parameters")
     ticker_input = st.text_input("Ticker Symbol", value="NVDA").upper()
@@ -80,12 +79,12 @@ with st.sidebar:
         st.divider()
         target_price = st.number_input("Target Price ($)", value=float(spot_price))
         order_size = st.number_input("Contracts", value=1, min_value=1)
-        stop_loss_pct = st.slider("Stop Loss (%)", 0, 100, 50) / 100
+        stop_loss_pct = st.slider("Stop Loss (%)", 0, 100, 50) / 100 
     else:
         st.error("Invalid Ticker or No Options Data.")
         st.stop()
 
-# --- MATH LOGIC ---
+# MATH LOGIC
 premium = option_row["ask"]
 iv = option_row["impliedVolatility"]
 breakeven = strike_price + premium if trade_type == "Call" else strike_price - premium
@@ -117,7 +116,7 @@ m1.metric("Spot Price", f"${spot_price:.2f}")
 m2.metric("Breakeven", f"${breakeven:.2f}")
 m3.metric("Implied Vol (IV)", f"{iv*100:.2f}%")
 m4.metric("Return Ratio", f"{((total_pnl / max_risk * 100)/100):.2f}")
-m5.metric("Exp. Value (EV)", f"${ev:.2f}", delta=f"{ev:.2f}")
+m5.metric("Exp. Value (EV)", f"${ev:.2f}")
 
 
 st.write("---")
@@ -129,7 +128,7 @@ with col_left:
     prob_data = {
         "Level": ["Target Price", "Strike Price", "Breakeven"],
         "Price": [f"${target_price:.2f}", f"${strike_price:.2f}", f"${breakeven:.2f}"],
-        "Prob. of Profit": [f"{t_prob:.2%}", f"{s_prob:.2%}", f"{b_prob:.2%}"]
+        "Probability to Reach": [f"{t_prob:.2%}", f"{s_prob:.2%}", f"{b_prob:.2%}"]
     }
     st.table(pd.DataFrame(prob_data))
     
@@ -155,10 +154,18 @@ with col_right:
     ax.axvline(spot_price, color='#bfa15d', linestyle='--', linewidth=1, label='Current Price')
     ax.axvline(breakeven, color='red', linestyle='--', linewidth=1, label='Breakeven')
     
+    # --- NEW: INCREASE X-AXIS INCREMENTS ---
+    # This creates 15 evenly spaced labels between the min and max simulated price
+    import numpy as np
+    xticks = np.linspace(sim_prices.min(), sim_prices.max(), 15)
+    ax.set_xticks(xticks)
+    # Format the labels to 0 decimal places for a cleaner look
+    ax.set_xticklabels([f"${x:.0f}" for x in xticks])
+    
     ax.set_title(f"{ticker_input} Simulated Distribution at Expiry", fontsize=14, color="#ffffff")
     ax.set_xlabel("Price ($)", fontsize=10, color="#ffffff")
     ax.set_ylabel("Frequency", fontsize=10, color="#ffffff")
-    ax.tick_params(colors="#ffffff")
+    ax.tick_params(colors="#ffffff", labelsize=8) # Smaller labelsize so they don't overlap
     ax.legend()
     
     st.pyplot(fig)
