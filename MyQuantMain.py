@@ -36,17 +36,20 @@ with col_logo:
     # Stylized text logo that defines the Kern brand
     st.markdown("""
         <h1 style="
-            font-family: 'times new roman', serif; 
+            font-family: 'Times New Roman', Times, serif; 
             color: #bfa15d; 
             font-size: 3rem; 
-            margin-top: 10px;
-            letter-spacing: 1px;
-        ">KERN<span style="color: #bfa15d;">.</span></h1>
+            font-weight: 300;     
+            margin-top: 15px;      
+            margin-left: 130px;   
+            letter-spacing: 8px;    
+            text-transform: uppercase;
+        ">KERN<span style="color: #bfa15d; margin-left: -5px;">.</span></h1>
     """, unsafe_allow_html=True)
 
 with col_title:
-    st.title("MyQuant | Advanced Options Analysis")
-    st.write("Institutional-grade probability modeling. Built for the Retail Investor.")
+    st.title("MyQuant | Advanced Options Analytics")
+    st.write("Institutional-grade probability modeling built for the Retail Investor.")
 
 st.divider()
 
@@ -61,8 +64,8 @@ def fetch_ticker_resource(symbol):
 
 #  SIDEBAR / INPUTS 
 with st.sidebar:
-    st.header("KERN | Market Research\nTrade Parameters")
-    ticker_input = st.text_input("Ticker Symbol", value="Enter Ticker Here").upper()
+    st.header("MyQuant | KERN.\nTrade Parameters")
+    ticker_input = st.text_input("Ticker Symbol", value="SPY").upper()
     
     ticker, expirations, spot_price = fetch_ticker_resource(ticker_input)
 
@@ -162,10 +165,10 @@ with col_right:
     # Format the labels to 0 decimal places for a cleaner look
     ax.set_xticklabels([f"${x:.0f}" for x in xticks])
     
-    ax.set_title(f"{ticker_input} Simulated Distribution at Expiry", fontsize=14, color="#ffffff")
-    ax.set_xlabel("Price ($)", fontsize=10, color="#ffffff")
-    ax.set_ylabel("Frequency", fontsize=10, color="#ffffff")
-    ax.tick_params(colors="#ffffff", labelsize=8) # Smaller labelsize so they don't overlap
+    ax.set_title(f"{ticker_input} Simulated Distribution at Expiry", fontsize=14, color="#595a67")
+    ax.set_xlabel("Price ($)", fontsize=10, color="#595a67")
+    ax.set_ylabel("Frequency", fontsize=10, color="#595a67")
+    ax.tick_params(colors="#595a67", labelsize=8) # Smaller labelsize so they don't overlap
     ax.legend()
     
     st.pyplot(fig)
