@@ -111,7 +111,7 @@ else:
 pnl_per_contract = (intrinsic - premium) * 100
 total_pnl = pnl_per_contract * order_size
 max_risk = premium * order_size * 100
-ev = (b_prob * total_pnl) - ((1 - b_prob) * max_risk * stop_loss_pct)
+ev = (b_prob * total_pnl) - (((1 - b_prob) * max_risk) * stop_loss_pct)
 
 # --- DASHBOARD LAYOUT ---
 m1, m2, m3, m4, m5 = st.columns(5)
