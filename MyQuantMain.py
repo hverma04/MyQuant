@@ -31,7 +31,7 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 # APP HEADER 
-col_logo, col_title = st.columns([1, 4])
+col_logo, col_title = st.columns([1, 1])
 with col_logo:
     # Stylized text logo that defines the Kern brand
     st.markdown("""
