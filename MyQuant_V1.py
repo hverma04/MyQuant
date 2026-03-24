@@ -5,7 +5,7 @@ import numpy as np
 from scipy.stats import norm
 import matplotlib.pyplot as plt
 import os
-#HOW TO RUN = python -m streamlit run MyQuant/MyQuantMain.py 
+#HOW TO RUN = python -m streamlit run MyQuant_V1.py 
 st.set_page_config(page_title="Kern | MyQuant", layout="wide")
 
 #CUSTOM CSS FOR STYLING THE DASHBOARD
