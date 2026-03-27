@@ -6,6 +6,22 @@ from scipy.stats import norm
 import matplotlib.pyplot as plt
 import os
 #HOW TO RUN = python -m streamlit run MyQuant_V1.py 
+
+def calculate_black_scholes(S, K, T, r, sigma, option_type="Call"):
+    """Calculates the theoretical Black-Scholes price."""
+    # Avoid division by zero
+    if T <= 0 or sigma <= 0:
+        return max(0, S - K) if option_type == "Call" else max(0, K - S)
+        
+    d1 = (np.log(S / K) + (r + 0.5 * sigma**2) * T) / (sigma * np.sqrt(T))
+    d2 = d1 - sigma * np.sqrt(T)
+    
+    if option_type == "Call":
+        price = (S * norm.cdf(d1)) - (K * np.exp(-r * T) * norm.cdf(d2))
+    else:
+        price = (K * np.exp(-r * T) * norm.cdf(-d2)) - (S * norm.cdf(-d1))
+    return price
+
 st.set_page_config(page_title="Kern | MyQuant", layout="wide")
 
 #CUSTOM CSS FOR STYLING THE DASHBOARD
@@ -88,15 +104,24 @@ with st.sidebar:
         st.stop()
 
 # MATH LOGIC
+# --- UPDATED MATH LOGIC ---
 premium = option_row["ask"]
 iv = option_row["impliedVolatility"]
-breakeven = strike_price + premium if trade_type == "Call" else strike_price - premium
+risk_free_rate = 0.04  # 4% proxy for risk-free rate
 
 days_to_exp = (pd.to_datetime(selected_exp) - pd.to_datetime("today")).days
 time_to_exp = max(days_to_exp, 1) / 365
-periodic_iv = iv * np.sqrt(time_to_exp)
 
+# 1. Calculate Black-Scholes Fair Value
+bs_fair_value = calculate_black_scholes(
+    spot_price, strike_price, time_to_exp, risk_free_rate, iv, trade_type
+)
+
+# 2. Existing Probability Logic
+breakeven = strike_price + premium if trade_type == "Call" else strike_price - premium
+periodic_iv = iv * np.sqrt(time_to_exp)
 o = periodic_iv
+
 t_z = np.log(target_price / spot_price) / o
 s_z = np.log(strike_price / spot_price) / o
 b_z = np.log(breakeven / spot_price) / o
@@ -108,21 +133,22 @@ else:
     t_prob, s_prob, b_prob = norm.cdf(t_z), norm.cdf(s_z), norm.cdf(b_z)
     intrinsic = max(0, strike_price - target_price)
 
+# 3. PnL Calculations
 pnl_per_contract = (intrinsic - premium) * 100
 total_pnl = pnl_per_contract * order_size
 max_risk = premium * order_size * 100
 ev = (b_prob * total_pnl) - (((1 - b_prob) * max_risk) * stop_loss_pct)
 
 # --- DASHBOARD LAYOUT ---
-m1, m2, m3, m4, m5 = st.columns(5)
+valuation_label = "Overvalued" if premium > bs_fair_value else "Undervalued"
+pct_diff = ((premium - bs_fair_value) / bs_fair_value) * 100
+m1, m4, m5, m6, m2, m3 = st.columns(6)
 m1.metric("Spot Price", f"${spot_price:.2f}")
-m2.metric("Breakeven", f"${breakeven:.2f}")
-m3.metric("Implied Vol (IV)", f"{iv*100:.2f}%")
-m4.metric("Return Ratio", f"{((total_pnl / max_risk * 100)/100):.2f}")
-m5.metric("Exp. Value (EV)", f"${ev:.2f}")
-
-
-st.write("---")
+m2.metric("Market Premium", f"${premium:.2f}")
+m3.metric("Black-Scholes Fair Value", f"${bs_fair_value:.2f}", delta=f"{pct_diff:.1f}% {valuation_label}", delta_color="inverse")
+m4.metric("Breakeven", f"${breakeven:.2f}")
+m5.metric("Implied Vol (IV)", f"{iv*100:.1f}%")
+m6.metric("Exp. Value (EV) - Per Trade", f"${ev:.2f}")
 
 col_left, col_right = st.columns([2, 3])
 
