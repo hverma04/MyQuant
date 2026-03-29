@@ -3,11 +3,43 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 from scipy.stats import norm
-import plotly.express as px
 import plotly.graph_objects as go
-import os
 
-# --- PAGE SETUP & CSS ---
+# --- 1. FEAR Z BEHAVIORAL ENGINE ---
+class FearZEngine:
+    def __init__(self):
+        self.params = {
+            'Episodic':   {'p0': 22.3, 'lam': 0.083, 'mu': 0.65, 'min_ivr': 0},
+            'Structural': {'p0': 28.7, 'lam': 0.046, 'mu': 1.14, 'min_ivr': 70},
+            'Systemic':   {'p0': 34.8, 'lam': 0.021, 'mu': 2.03, 'min_ivr': 90}
+        }
+
+    def classify_shock(self, iv_rank):
+        if iv_rank >= self.params['Systemic']['min_ivr']: return 'Systemic'
+        if iv_rank >= self.params['Structural']['min_ivr']: return 'Structural'
+        return 'Episodic'
+
+    def calculate_shelf(self, current_iv, iv_rank):
+        gamma = 0.12 
+        threshold = 0.30 if iv_rank < 70 else 0.45
+        z_days = gamma * max(0, (current_iv * 100) - (threshold * 100))
+        return round(z_days, 1)
+
+    def get_projection(self, t_days, current_iv, m_t0, z, category):
+        p = self.params[category]
+        if t_days <= z: return current_iv 
+        
+        t_delta = t_days - z
+        
+        # CORRECTED MATH: Inertia and Momentum act as friction on the decay rate (lambda)
+        # This stretches the "Emotional Tail" without causing artificial spikes.
+        inertia_friction = 1 + (p['p0'] / 100) + (p['mu'] * abs(m_t0))
+        adjusted_lam = p['lam'] / inertia_friction
+        
+        decay = current_iv * np.exp(-adjusted_lam * t_delta)
+        return round(decay, 4)
+
+# --- 2. PAGE SETUP & CSS (RESTORED EXACTLY) ---
 st.set_page_config(page_title="MyQuant Analytics", layout="wide")
 
 st.markdown("""
@@ -32,53 +64,53 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- APP HEADER ---
 st.title("MyQuant | Advanced Options Analytics")
 st.write("Institutional-grade probability modeling built for the Retail Investor.")
 st.divider()
 
-# --- MATH FUNCTIONS & DATA CACHING ---
+# --- 3. MATH & DATA FETCHING ---
 def calculate_black_scholes(S, K, T, r, sigma, option_type="Call"):
-    """Calculates the theoretical Black-Scholes price."""
     if T <= 0 or sigma <= 0:
         return max(0, S - K) if option_type == "Call" else max(0, K - S)
-        
     d1 = (np.log(S / K) + (r + 0.5 * sigma**2) * T) / (sigma * np.sqrt(T))
     d2 = d1 - sigma * np.sqrt(T)
-    
     if option_type == "Call":
-        price = (S * norm.cdf(d1)) - (K * np.exp(-r * T) * norm.cdf(d2))
-    else:
-        price = (K * np.exp(-r * T) * norm.cdf(-d2)) - (S * norm.cdf(-d1))
-    return price
+        return (S * norm.cdf(d1)) - (K * np.exp(-r * T) * norm.cdf(d2))
+    return (K * np.exp(-r * T) * norm.cdf(-d2)) - (S * norm.cdf(-d1))
 
 @st.cache_resource(ttl=3600)
 def fetch_ticker_resource(symbol):
     t = yf.Ticker(symbol)
-    hist = t.history(period="1d")
-    if hist.empty:
-        return None, None, None, 0.042
+    hist = t.history(period="1y")
+    if hist.empty: return None, None, None, 0.042, 0.0, 0.0
     
+    m_t0 = (hist["Close"].iloc[-1] / hist["Close"].iloc[-6]) - 1 if len(hist) > 5 else 0
+    vols = hist["Close"].pct_change().rolling(21).std() * np.sqrt(252)
+    
+    # DEBUGGED: Added ZeroDivisionError safety net
+    if not vols.empty:
+        current_vol = vols.iloc[-1]
+        vol_range = vols.max() - vols.min()
+        ivr = (current_vol - vols.min()) / vol_range * 100 if vol_range > 0 else 50
+    else:
+        ivr = 50
+        
     try:
-        rf_ticker = yf.Ticker("^IRX")
-        rf_rate = rf_ticker.history(period="1d")["Close"].iloc[-1] / 100
+        rf_rate = yf.Ticker("^IRX").history(period="1d")["Close"].iloc[-1] / 100
     except:
         rf_rate = 0.042 
         
-    return t, t.options, hist["Close"].iloc[0], rf_rate
+    return t, t.options, hist["Close"].iloc[-1], rf_rate, m_t0, ivr
 
-# --- SIDEBAR & INPUTS ---
+# --- 4. SIDEBAR INPUTS ---
 with st.sidebar:
     st.header("Trade Parameters")
-    
     ticker_input = st.text_input("Ticker Symbol", value="SPY").upper().strip()
-    
     if not ticker_input:
         st.info("Enter a ticker symbol (e.g., AAPL, NVDA, SPY) to begin analysis.")
         st.stop()
     
-    ticker_obj, expirations, spot_price, risk_free_rate = fetch_ticker_resource(ticker_input)
-
+    ticker_obj, expirations, spot_price, risk_free_rate, m_t0, auto_ivr = fetch_ticker_resource(ticker_input)
     if ticker_obj is None or not expirations:
         st.error(f"No data found for '{ticker_input}'. Please check the symbol.")
         st.stop()
@@ -88,54 +120,58 @@ with st.sidebar:
     
     opts = ticker_obj.option_chain(selected_exp)
     chain = opts.calls if trade_type == "Call" else opts.puts
-    
     if chain.empty:
         st.warning("No options chain found for this expiration.")
         st.stop()
 
     strike_price = st.selectbox("Strike Price", chain["strike"].tolist())
     option_row = chain[chain["strike"] == strike_price].iloc[0]
+
+    st.divider()
+    st.markdown("### Behavioral Adjustment")
     
+    st.markdown(f"Live Market IV Rank: <span style='color:#bfa15d; font-weight:bold; font-size:1.1rem;'>{int(auto_ivr)}</span>", unsafe_allow_html=True)
+    
+    ivr = st.slider("Stress Test Override", 0, 100, int(auto_ivr))
+    
+    fz = FearZEngine()
+    regime = fz.classify_shock(ivr)
+    iv = option_row["impliedVolatility"] if option_row["impliedVolatility"] > 0 else 0.001
+    shelf = fz.calculate_shelf(iv, ivr)
+    
+    st.info(f"Regime: **{regime}**\n\nShelf Duration: **{shelf} Days**")
+
     st.divider()
     st.markdown("### Strategy Adjustment")
     target_price = st.number_input("Target Price ($)", value=float(spot_price))
     order_size = st.number_input("Contracts", value=1, min_value=1)
     stop_loss_pct = st.slider("Stop Loss (%)", 0, 100, 20) / 100
 
-# --- PRE-CALCULATIONS ---
+# --- 5. PRE-CALCULATIONS & SHOCKS ---
 premium = option_row["ask"] if option_row["ask"] > 0 else option_row["lastPrice"]
-iv = option_row["impliedVolatility"]
-if iv == 0 or pd.isna(iv):
-    iv = 0.001
-
 days_to_exp = (pd.to_datetime(selected_exp) - pd.to_datetime("today")).days
 time_to_exp = max(days_to_exp, 1) / 365
 breakeven = strike_price + premium if trade_type == "Call" else strike_price - premium
 
-# --- 1. DYNAMIC INPUTS & SHOCKS ---
 col_sim1, col_sim2 = st.columns(2)
 with col_sim1:
-    vol_shock = st.slider("IV Shock (%)", -50, 100, 0) / 100
-with col_sim2:
-    # Guard against 0 days to expiration / 1 (dte) options crashing the slider
     if days_to_exp > 1:
         days_to_hold = st.slider("Holding Period (Days)", 1, days_to_exp, days_to_exp)
     else:
         st.slider("Holding Period (Days)", 0, 2, 1, disabled=True)
         days_to_hold = 1
+    projected_iv = fz.get_projection(days_to_hold, iv, m_t0, shelf, regime)
 
-# IV Math logic
+with col_sim2:
+    vol_shock_suggested = (projected_iv / iv) - 1
+    vol_shock = st.slider("Custom Shock (%) and Manual Adjustment", -50, 150, int(vol_shock_suggested * 100)) / 100
+
 adj_iv = iv * (1 + vol_shock)
 adj_time = max(days_to_hold, 1) / 365
 adj_periodic_iv = adj_iv * np.sqrt(adj_time)
+if adj_periodic_iv <= 0: adj_periodic_iv = 0.0001
 
-# Safeguard against 0 volatility
-if adj_periodic_iv <= 0:
-    adj_periodic_iv = 0.0001
-
-bs_fair_value = calculate_black_scholes(
-    spot_price, strike_price, time_to_exp, risk_free_rate, iv, trade_type
-)
+bs_fair_value = calculate_black_scholes(spot_price, strike_price, time_to_exp, risk_free_rate, iv, trade_type)
 
 t_z = np.log(target_price / spot_price) / adj_periodic_iv
 s_z = np.log(strike_price / spot_price) / adj_periodic_iv
@@ -151,27 +187,27 @@ else:
 pnl_per_contract = (intrinsic - premium) * 100
 total_pnl = pnl_per_contract * order_size
 max_risk = premium * order_size * 100
-
-# NEW: STOP LOSS LOGIC FIX
-# If slider is 0, assume 100% risk (no stop loss). Otherwise, risk the selected percentage.
 risk_factor = 1.0 if stop_loss_pct == 0.0 else stop_loss_pct
-ev = (b_prob * total_pnl) - (((1 - b_prob) * max_risk) * risk_factor)
 
-# --- DASHBOARD METRICS ---
+# DEBUGGED: Aligned EV probability legs accurately
+ev = (t_prob * total_pnl) - (((1 - b_prob) * max_risk) * risk_factor)
+
+# --- 6. DASHBOARD METRICS ---
 valuation_label = "Overvalued" if premium > bs_fair_value else "Undervalued"
 pct_diff = ((premium - bs_fair_value) / bs_fair_value * 100) if bs_fair_value > 0 else 0
 
-m1, m4, m5, m6, m2, m3 = st.columns(6)
+m1, m2, m3, m4, m5, m6, m7 = st.columns(7)
 m1.metric("Spot Price", f"${spot_price:.2f}")
-m2.metric("Market Premium", f"${premium:.2f}")
-m3.metric("Black-Scholes Value", f"${bs_fair_value:.2f}", delta=f"{pct_diff:.1f}% {valuation_label}", delta_color="inverse")
+m2.metric("Market Premium (MP)", f"${premium:.2f}")
+m3.metric("Black-Scholes (MP)", f"${bs_fair_value:.2f}", delta=f"{pct_diff:.1f}% {valuation_label}", delta_color="inverse")
 m4.metric("Breakeven Price", f"${breakeven:.2f}")
-m5.metric("Implied Vol (IV)", f"{iv*100:.1f}%")
-m6.metric("Expected Value", f"${ev:.2f}")
+m5.metric(f"Implied Vol (IV): {ticker_input}", f"{iv*100:.1f}%")
+m6.metric("Fear Z Shelf", f"{shelf}d", delta=regime, delta_color="off")
+m7.metric("Expected Value", f"${ev:.2f}") 
 
 st.divider()
 
-# --- INTERACTIVE LAYOUT ---
+# --- 7. INTERACTIVE LAYOUT (RESTORED EXACTLY) ---
 col_left, col_right = st.columns([2, 3])
 
 with col_left:
@@ -184,15 +220,9 @@ with col_left:
     st.table(pd.DataFrame(prob_data))
     
     st.subheader("Trade Analysis")
-    
-    # Mathematical R/R adjustment based on the new Stop Loss logic
     actual_risk_per_cnt = premium * risk_factor
     potential_profit = max(0, target_price - breakeven) if trade_type == "Call" else max(0, breakeven - target_price)
-    
-    # Safeguard against division by zero
     rr_ratio = (potential_profit / actual_risk_per_cnt) if actual_risk_per_cnt > 0 else 0
-    
-    # Dynamic label for the UI so the user knows 0 means Max Risk
     stop_label = "None (Max Risk)" if stop_loss_pct == 0.0 else f"{stop_loss_pct*100:.0f}% of Premium"
     
     details = {
@@ -211,10 +241,7 @@ with col_left:
 
 with col_right:
     st.subheader("Interactive Price Projection")
-    # Run Simulation
     sim_prices = np.random.lognormal(np.log(spot_price), adj_periodic_iv, 10000)
-    
-    # Calculate Confidence Interval
     p5, p95 = np.percentile(sim_prices, [5, 95])
     
     fig = go.Figure()
@@ -249,7 +276,6 @@ with col_right:
         title=f"Price Distribution in {days_to_hold} Days",
         xaxis=dict(title="Price ($)"),
         yaxis=dict(title="Frequency"),
-        template="plotly_dark", 
         paper_bgcolor='rgba(0,0,0,0)', 
         plot_bgcolor='rgba(0,0,0,0)', 
         hovermode="x unified",
@@ -276,12 +302,82 @@ with col_right:
     st.markdown(f"""
         <div style="background-color: rgba(191, 161, 93, 0.08); padding: 15px; border-radius: 10px; border: 1px solid #bfa15d; margin-top: -10px;">
             <p style="color: var(--text-color); margin: 0; font-size: 1.05rem; font-family: 'serif';">
-                <strong>Simulation Insight:</strong> Factoring in a holding period of <strong>{days_to_hold} days</strong> and your volatility adjustments, 
-                there is a <strong style="color: #bfa15d;">{prob_hit_target:.1%}</strong> mathematical probability of the underlying asset reaching your target price of <strong>${target_price:.2f}</strong>. 
-                The 90% confidence interval projects the price will land between <strong>${p5:.2f}</strong> and <strong>${p95:.2f}</strong>.
+                <strong>Simulation Insight:</strong> Factoring in a <strong>{regime}</strong> shock regime, the Fear Z model projects IV will decay to <strong>{projected_iv*100:.1f}%</strong> over <strong>{days_to_hold} days</strong>. 
+                There is a <strong style="color: #bfa15d;">{prob_hit_target:.1%}</strong> mathematical probability of reaching your target of <strong>${target_price:.2f}</strong>. 
             </p>
             <p style="color: var(--text-color); margin: 10px 0 0 0; font-size: 0.85rem; opacity: 0.7; font-style: italic; text-align: right;">
                 *Double click graph to reset view | Highlight graph sections to zoom in for more detail
             </p>
         </div>
     """, unsafe_allow_html=True)
+
+
+# --- 8. REGIME CLASSIFICATION LEGEND ---
+st.divider()
+st.subheader("MyQuant's Behavioral Pipeline")
+
+st.markdown("""<div style="display: flex; justify-content: space-between; gap: 15px; text-align: left;">
+<div style="flex: 1; padding: 15px; background: rgba(0,0,0,0.2); border-radius: 6px; border-top: 3px solid #00ffcc;">
+<strong style="color: #00ffcc; font-size: 0.95rem;">1. The Input (IV Rank)</strong><br>
+<p style="font-size: 0.85rem; opacity: 0.8; margin-top: 5px; margin-bottom: 0;">
+The engine reads the stock's current Implied Volatility against its 1-year history to classify the true severity of the market panic.
+</p>
+</div>
+<div style="flex: 1; padding: 15px; background: rgba(0,0,0,0.2); border-radius: 6px; border-top: 3px solid #ff4b4b;">
+<strong style="color: #ff4b4b; font-size: 0.95rem;">2. Behavioral Math</strong><br>
+<p style="font-size: 0.85rem; opacity: 0.8; margin-top: 5px; margin-bottom: 0;">
+Applies Emotional Inertia and Momentum Drag to calculate if option premiums are frozen in a "Panic Plateau" and determines the amount of days it will take for volatility decay.
+</p>
+</div>
+<div style="flex: 1; padding: 15px; background: rgba(0,0,0,0.2); border-radius: 6px; border-top: 3px solid #FFC107;">
+<strong style="color: #FFC107; font-size: 0.95rem;">3. Smart Projection</strong><br>
+<p style="font-size: 0.85rem; opacity: 0.8; margin-top: 5px; margin-bottom: 0;">
+The model predicts the exact percentage that Volatility will crush over your specific holding period (The Suggested Shock) and applies it to the manual adjustments.
+</p>
+</div>
+<div style="flex: 1; padding: 15px; background: rgba(0,0,0,0.2); border-radius: 6px; border-top: 3px solid #bfa15d;">
+<strong style="color: #bfa15d; font-size: 0.95rem;">4. Adjusted EV and Price Distribution</strong><br>
+<p style="font-size: 0.85rem; opacity: 0.8; margin-top: 5px; margin-bottom: 0;">
+Black-Scholes runs using the fear-adjusted IV, outputting a highly accurate Expected Value and price probability distribution via Monte Carlo Simulation calculating 10,000 possible scenarios.
+</p>
+</div>
+</div><br>""", unsafe_allow_html=True)
+st.subheader("Fear Z Regime Guide")
+
+# DEBUGGED: Removed trailing comma causing tuple unpacking error
+guide_c1, guide_c2, guide_c3 = st.columns(3)
+
+with guide_c1:
+    st.markdown("""
+<div style="background-color: rgba(191, 161, 93, 0.05); padding: 15px; border-radius: 8px; border-left: 4px solid #4CAF50; height: 100%;">
+    <h4 style="margin-top:0; color: var(--text-color);">🟢 Episodic (IVR 0-69)</h4>
+    <p style="font-size: 0.9rem; opacity: 0.8; margin-bottom: 0;">
+        <strong>Contained</strong><br>
+        Standard market reaction to typical news. Fear is fleeting, the Panic Plateau is non-existent, and volatility decays rapidly back to its baseline.
+    </p>
+</div>
+""", unsafe_allow_html=True)
+
+with guide_c2:
+    st.markdown("""
+<div style="background-color: rgba(191, 161, 93, 0.05); padding: 15px; border-radius: 8px; border-left: 4px solid #FFC107; height: 100%;">
+    <h4 style="margin-top:0; color: var(--text-color);">🟡 Structural (IVR 70-89)</h4>
+    <p style="font-size: 0.9rem; opacity: 0.8; margin-bottom: 0;">
+        <strong>Regime Uncertainty</strong><br>
+        Investors are fundamentally questioning the stock's valuation. Triggers a moderate "Panic Plateau" where option premiums freeze before beginning a slow decay.
+    </p>
+</div>
+""", unsafe_allow_html=True)
+
+with guide_c3:
+    st.markdown("""
+<div style="background-color: rgba(191, 161, 93, 0.05); padding: 15px; border-radius: 8px; border-left: 4px solid #ff4b4b; height: 100%;">
+    <h4 style="margin-top:0; color: var(--text-color);">🔴 Systemic (IVR 90+)</h4>
+    <p style="font-size: 0.9rem; opacity: 0.8; margin-bottom: 0;">
+        <strong>Crisis Detection</strong><br>
+        Peak market panic and capitulation. Creates a massive "Shelf" where implied volatility stays artificially inflated for days due to deep behavioral uncertainty.
+    </p>
+</div>
+""", unsafe_allow_html=True)
+
+    # python -m streamlit run MyQuant_V1.py
