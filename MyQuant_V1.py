@@ -312,7 +312,7 @@ pct_diff = ((premium - bs_fair_value) / bs_fair_value * 100) if bs_fair_value > 
 r1 = st.columns(4)
 r1[0].metric("Spot Price", f"${spot_price:.2f}")
 r1[1].metric("Market Premium", f"${premium:.2f}")
-r1[2].metric("Black-Scholes", f"${bs_fair_value:.2f}", delta=f"{pct_diff:.1f}%", delta_color="inverse")
+r1[2].metric("Black-Scholes", f"${bs_fair_value:.2f}", delta=f"{pct_diff:.1f}% {valuation_label}", delta_color="inverse")
 r1[3].metric("Exit Premium", f"${projected_premium:.2f}", delta=f"{projected_roi:.1f}% ROI")
 # Row 2
 r2 = st.columns(4)
