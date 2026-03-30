@@ -6,6 +6,7 @@ from scipy.stats import norm
 import plotly.graph_objects as go
 
 # --- 1. FEAR Z BEHAVIORAL ENGINE ---
+# --- 1. FEAR Z BEHAVIORAL ENGINE ---
 class FearZEngine:
     def __init__(self):
         self.params = {
@@ -19,11 +20,36 @@ class FearZEngine:
         if iv_rank >= self.params['Structural']['min_ivr']: return 'Structural'
         return 'Episodic'
 
-    def calculate_shelf(self, current_iv, iv_rank):
-        gamma = 0.12 
+    def automate_gamma(self, vol_history):
+        """Calculates ticker-specific gamma based on IV mean reversion speed."""
+        # Safety check: if vol_history is empty or too short, return baseline 0.12
+        if vol_history is None or len(vol_history) < 10:
+            return 0.12
+        
+        # Calculate daily change in IV (y) and distance from mean (x)
+        mean_iv = vol_history.mean()
+        y = np.diff(vol_history) 
+        x = mean_iv - vol_history[:-1].values 
+        
+        # Linear Regression: ΔIV = Gamma * (Mean - Current_IV)
+        covariance = np.cov(x, y)[0, 1]
+        variance = np.var(x)
+        
+        ticker_gamma = covariance / variance if variance > 0 else 0.12
+        return np.clip(ticker_gamma, 0.05, 0.25)
+
+    def calculate_shelf(self, current_iv, iv_rank, vol_history):
+        # 1. Get dynamic gamma
+        gamma = self.automate_gamma(vol_history)
+        
+        # 2. Threshold logic
         threshold = 0.30 if iv_rank < 70 else 0.45
         z_days = gamma * max(0, (current_iv * 100) - (threshold * 100))
-        return round(z_days, 1)
+        
+        # 3. CRITICAL: Return BOTH values as a tuple so the sidebar can 'unpack' them
+        return round(z_days, 1), round(gamma, 3)
+
+    # ... (keep get_projection exactly as it was)
 
     def get_projection(self, t_days, current_iv, m_t0, z, category):
         p = self.params[category]
@@ -44,28 +70,84 @@ st.set_page_config(page_title="MyQuant Analytics", layout="wide")
 
 st.markdown("""
     <style>
-    /* Metric Cards */
+    /* --- BRANDING HEADER LAYOUT --- */
+    .branding-row {
+        display: flex;
+        align-items: center; 
+        margin-bottom: 20px;
+    }
+    .logo-col {
+        flex: 0 0 170px; /* INCREASED: From 130px to 170px to fit the larger logo */
+        border-right: 1px solid rgba(191, 161, 93, 0.4); 
+        margin-right: 25px;
+        padding-top: 5px;
+    }
+    .logo-text-kern {
+        font-family: 'Times New Roman', Times, serif;
+        color: #bfa15d;
+        letter-spacing: 0.6rem;
+        font-size: 5rem; /* INCREASED: From 1.1rem to 1.5rem */
+        text-transform: uppercase;
+        margin: 0;
+        line-height: 1;
+    }
+    }
+    .title-col {
+        flex: 1;
+    }
+    .main-title-text {
+        font-size: 2.4rem;
+        font-weight: 700;
+        margin: 0;
+        line-height: 1.1;
+        color: var(--text-color); /* Adapts to your theme */
+    }
+    .subtitle-text {
+        font-size: 1.05rem;
+        opacity: 0.8;
+        margin-top: 4px;
+        font-family: 'serif';
+        color: var(--text-color);
+    }
+
+    /* --- METRIC CARDS (UNTOUCHED) --- */
     div[data-testid="stMetric"] {
-        background-color: rgba(191, 161, 93, 0.08); /* Subtle gold tint */
+        background-color: rgba(191, 161, 93, 0.08);
         padding: 15px;
         border-radius: 10px;
         border: 1px solid #bfa15d;
+        min-height: 134px; 
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
     }
-    /* Keep Metric Labels Gold */
+    
+    div[data-testid="stMetric"] > div {
+        width: 100%;
+        text-align: left;
+    }
+
     div[data-testid="stMetricLabel"] > div {
         color: #bfa15d !important;
         font-weight: bold;
-    }
-    /* Keep Sidebar Labels consistent */
-    div[data-testid="stSidebar"] label {
-        font-family: 'serif';
-        font-size: 1.1rem;
+        justify-content: center;
     }
     </style>
     """, unsafe_allow_html=True)
 
-st.title("MyQuant | Advanced Options Analytics")
-st.write("Institutional-grade probability modeling built for the Retail Investor.")
+# --- BRANDED HEADER RENDERING ---
+st.markdown("""
+    <div class="branding-row">
+        <div class="logo-col">
+            <p class="logo-text-kern">KERN.</p>
+        </div>
+        <div class="title-col">
+            <div class="main-title-text">MyQuant | Advanced Options Analytics</div>
+            <p class="subtitle-text">Institutional-grade probability modeling built for the Retail Investor.</p>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
 st.divider()
 
 # --- 3. MATH & DATA FETCHING ---
@@ -86,7 +168,7 @@ def fetch_ticker_resource(symbol):
     
     m_t0 = (hist["Close"].iloc[-1] / hist["Close"].iloc[-6]) - 1 if len(hist) > 5 else 0
     vols = hist["Close"].pct_change().rolling(21).std() * np.sqrt(252)
-    
+    vols = vols.dropna()
     # DEBUGGED: Added ZeroDivisionError safety net
     if not vols.empty:
         current_vol = vols.iloc[-1]
@@ -100,7 +182,8 @@ def fetch_ticker_resource(symbol):
     except:
         rf_rate = 0.042 
         
-    return t, t.options, hist["Close"].iloc[-1], rf_rate, m_t0, ivr
+    return t, t.options, hist["Close"].iloc[-1], rf_rate, m_t0, ivr, vols
+
 
 # --- 4. SIDEBAR INPUTS ---
 with st.sidebar:
@@ -110,7 +193,9 @@ with st.sidebar:
         st.info("Enter a ticker symbol (e.g., AAPL, NVDA, SPY) to begin analysis.")
         st.stop()
     
-    ticker_obj, expirations, spot_price, risk_free_rate, m_t0, auto_ivr = fetch_ticker_resource(ticker_input)
+    # 1. NEW UNPACKING (Added vol_history)
+    ticker_obj, expirations, spot_price, risk_free_rate, m_t0, auto_ivr, vol_history = fetch_ticker_resource(ticker_input)
+    
     if ticker_obj is None or not expirations:
         st.error(f"No data found for '{ticker_input}'. Please check the symbol.")
         st.stop()
@@ -134,14 +219,19 @@ with st.sidebar:
     
     ivr = st.slider("Stress Test Override", 0, 100, int(auto_ivr))
     
+    # 2. NEW DYNAMIC ENGINE LOGIC
     fz = FearZEngine()
     regime = fz.classify_shock(ivr)
     iv = option_row["impliedVolatility"] if option_row["impliedVolatility"] > 0 else 0.001
-    shelf = fz.calculate_shelf(iv, ivr)
     
-    st.info(f"Regime: **{regime}**\n\nShelf Duration: **{shelf} Days**")
+    # Passing vol_history here allows the engine to calculate a ticker-specific gamma
+    shelf, dynamic_gamma = fz.calculate_shelf(iv, ivr, vol_history) 
+    
+    # Updated UI to show the "Story" of the dynamic gamma
+    st.info(f"Regime: **{regime}**\n\nTicker Gamma: **{dynamic_gamma}**\n\nShelf Duration: **{shelf} Days**")
 
     st.divider()
+    # ... (rest of sidebar stays the same)
     st.markdown("### Strategy Adjustment")
     target_price = st.number_input("Target Price ($)", value=float(spot_price))
     order_size = st.number_input("Contracts", value=1, min_value=1)
@@ -173,9 +263,14 @@ if adj_periodic_iv <= 0: adj_periodic_iv = 0.0001
 
 bs_fair_value = calculate_black_scholes(spot_price, strike_price, time_to_exp, risk_free_rate, iv, trade_type)
 
-t_z = np.log(target_price / spot_price) / adj_periodic_iv
-s_z = np.log(strike_price / spot_price) / adj_periodic_iv
-b_z = np.log(breakeven / spot_price) / adj_periodic_iv
+# --- NEW MATH: Risk-Neutral Drift ---
+# Calculates the expected directional drift of the stock based on the risk-free rate and volatility drag
+drift = (risk_free_rate - 0.5 * adj_iv**2) * adj_time
+
+# Apply the drift to the Z-Score calculations
+t_z = (np.log(target_price / spot_price) - drift) / adj_periodic_iv
+s_z = (np.log(strike_price / spot_price) - drift) / adj_periodic_iv
+b_z = (np.log(breakeven / spot_price) - drift) / adj_periodic_iv
 
 if trade_type == "Call":
     t_prob, s_prob, b_prob = 1 - norm.cdf(t_z), 1 - norm.cdf(s_z), 1 - norm.cdf(b_z)
@@ -189,21 +284,42 @@ total_pnl = pnl_per_contract * order_size
 max_risk = premium * order_size * 100
 risk_factor = 1.0 if stop_loss_pct == 0.0 else stop_loss_pct
 
-# DEBUGGED: Aligned EV probability legs accurately
+# EV Calculation remains the same
 ev = (t_prob * total_pnl) - (((1 - b_prob) * max_risk) * risk_factor)
 
-# --- 6. DASHBOARD METRICS ---
+# --- NEW MATH: Projected Exit Premium ---
+# We calculate what the option will be worth at the END of your holding period
+days_remaining_at_exit = max(0, days_to_exp - days_to_hold)
+time_remaining_at_exit = days_remaining_at_exit / 365
+
+projected_premium = calculate_black_scholes(
+    S=target_price,               # The price you hope it hits
+    K=strike_price,               # Your fixed strike
+    T=time_remaining_at_exit,     # The time left when you sell
+    r=risk_free_rate,             # Interest rate
+    sigma=projected_iv,           # Your Fear Z projected IV
+    option_type=trade_type
+)
+
+# Calculate the projected ROI %
+projected_roi = ((projected_premium - premium) / premium) * 100 if premium > 0 else 0
+
+# --- 6. DASHBOARD METRICS (STACKED 4x4) ---
 valuation_label = "Overvalued" if premium > bs_fair_value else "Undervalued"
 pct_diff = ((premium - bs_fair_value) / bs_fair_value * 100) if bs_fair_value > 0 else 0
 
-m1, m2, m3, m4, m5, m6, m7 = st.columns(7)
-m1.metric("Spot Price", f"${spot_price:.2f}")
-m2.metric("Market Premium (MP)", f"${premium:.2f}")
-m3.metric("Black-Scholes (MP)", f"${bs_fair_value:.2f}", delta=f"{pct_diff:.1f}% {valuation_label}", delta_color="inverse")
-m4.metric("Breakeven Price", f"${breakeven:.2f}")
-m5.metric(f"Implied Vol (IV): {ticker_input}", f"{iv*100:.1f}%")
-m6.metric("Fear Z Shelf", f"{shelf}d", delta=regime, delta_color="off")
-m7.metric("Expected Value", f"${ev:.2f}") 
+# Row 1
+r1 = st.columns(4)
+r1[0].metric("Spot Price", f"${spot_price:.2f}")
+r1[1].metric("Market Premium", f"${premium:.2f}")
+r1[2].metric("Black-Scholes", f"${bs_fair_value:.2f}", delta=f"{pct_diff:.1f}%", delta_color="inverse")
+r1[3].metric("Exit Premium", f"${projected_premium:.2f}", delta=f"{projected_roi:.1f}% ROI")
+# Row 2
+r2 = st.columns(4)
+r2[0].metric(f"IV: {ticker_input}", f"{iv*100:.1f}%")
+r2[1].metric("Fear Z Shelf", f"{shelf}d", delta=regime, delta_color="off")
+r2[2].metric("Expected Value", f"${ev:.2f}")
+r2[3].metric("Breakeven", f"${breakeven:.2f}")
 
 st.divider()
 
@@ -241,7 +357,8 @@ with col_left:
 
 with col_right:
     st.subheader("Interactive Price Projection")
-    sim_prices = np.random.lognormal(np.log(spot_price), adj_periodic_iv, 10000)
+    # --- NEW MATH: Added 'drift' to the lognormal mean to synchronize with Black-Scholes probabilities ---
+    sim_prices = np.random.lognormal(np.log(spot_price) + drift, adj_periodic_iv, 10000)
     p5, p95 = np.percentile(sim_prices, [5, 95])
     
     fig = go.Figure()
