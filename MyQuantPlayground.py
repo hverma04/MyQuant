@@ -4,9 +4,9 @@ import pandas as pd
 import numpy as np
 from scipy.stats import norm
 import plotly.graph_objects as go
+import requests
 
-# --- 1. FEAR Z BEHAVIORAL ENGINE ---
-# --- 1. FEAR Z BEHAVIORAL ENGINE ---
+# 1. FEAR Z BEHAVIORAL ENGINE
 class FearZEngine:
     def __init__(self):
         self.params = {
@@ -49,8 +49,6 @@ class FearZEngine:
         # 3. CRITICAL: Return BOTH values as a tuple so the sidebar can 'unpack' them
         return round(z_days, 1), round(gamma, 3)
 
-    # ... (keep get_projection exactly as it was)
-
     def get_projection(self, t_days, current_iv, m_t0, z, category):
         p = self.params[category]
         if t_days <= z: return current_iv 
@@ -65,7 +63,7 @@ class FearZEngine:
         decay = current_iv * np.exp(-adjusted_lam * t_delta)
         return round(decay, 4)
 
-# --- 2. PAGE SETUP & CSS (RESTORED EXACTLY) ---
+# 2. PAGE SETUP & CSS (UPDATED FOR MOBILE RESPONSIVENESS)
 st.set_page_config(page_title="MyQuant Analytics", layout="wide")
 
 st.markdown("""
@@ -77,7 +75,7 @@ st.markdown("""
         margin-bottom: 20px;
     }
     .logo-col {
-        flex: 0 0 170px; /* INCREASED: From 130px to 170px to fit the larger logo */
+        flex: 0 0 170px; 
         border-right: 1px solid rgba(191, 161, 93, 0.4); 
         margin-right: 25px;
         padding-top: 5px;
@@ -86,11 +84,19 @@ st.markdown("""
         font-family: 'Times New Roman', Times, serif;
         color: #bfa15d;
         letter-spacing: 0.6rem;
-        font-size: 5rem; /* INCREASED: From 1.1rem to 1.5rem */
+        font-size: 5rem; 
         text-transform: uppercase;
         margin: 0;
         line-height: 1;
     }
+    .logo-text-span {
+        font-family: 'Times New Roman', Times, serif;
+        color: #bfa15d;
+        letter-spacing: 0.6rem;
+        font-size: 2.5rem; 
+        text-transform: uppercase;
+        margin: 0;
+        line-height: 1;
     }
     .title-col {
         flex: 1;
@@ -100,7 +106,7 @@ st.markdown("""
         font-weight: 700;
         margin: 0;
         line-height: 1.1;
-        color: var(--text-color); /* Adapts to your theme */
+        color: var(--text-color); 
     }
     .subtitle-text {
         font-size: 1.05rem;
@@ -108,6 +114,44 @@ st.markdown("""
         margin-top: 4px;
         font-family: 'serif';
         color: var(--text-color);
+    }
+
+    /* --- BEHAVIORAL PIPELINE CLASSES (New for Mobile) --- */
+    .pipeline-container {
+        display: flex; 
+        justify-content: space-between; 
+        gap: 15px; 
+        text-align: left;
+    }
+    .pipeline-box {
+        flex: 1; 
+        padding: 15px; 
+        background: rgba(0,0,0,0.2); 
+        border-radius: 6px;
+    }
+
+    /* --- MOBILE MEDIA QUERIES --- */
+    @media (max-width: 768px) {
+        .branding-row {
+            flex-direction: column;
+            text-align: center;
+        }
+        .logo-col {
+            flex: 1;
+            border-right: none;
+            border-bottom: 1px solid rgba(191, 161, 93, 0.4);
+            margin-right: 0;
+            margin-bottom: 15px;
+            padding-bottom: 15px;
+        }
+        .logo-text-kern { font-size: 3.5rem; }
+        .logo-text-span { font-size: 1.8rem; }
+        .main-title-text { font-size: 1.8rem; }
+        .subtitle-text { font-size: 0.9rem; }
+        
+        .pipeline-container {
+            flex-direction: column;
+        }
     }
 
     /* --- METRIC CARDS (UNTOUCHED) --- */
@@ -135,11 +179,13 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- BRANDED HEADER RENDERING ---
+# BRANDED HEADER RENDERING
 st.markdown("""
     <div class="branding-row">
         <div class="logo-col">
-            <p class="logo-text-kern">KERN.</p>
+            <span class="logo-text-span">
+                <p class="logo-text-kern">KERN.</p>
+            </span>
         </div>
         <div class="title-col">
             <div class="main-title-text">MyQuant | Advanced Options Analytics</div>
@@ -150,7 +196,7 @@ st.markdown("""
 
 st.divider()
 
-# --- 3. MATH & DATA FETCHING ---
+# 3. MATH & DATA FETCHING
 def calculate_black_scholes(S, K, T, r, sigma, option_type="Call"):
     if T <= 0 or sigma <= 0:
         return max(0, S - K) if option_type == "Call" else max(0, K - S)
@@ -180,9 +226,20 @@ def fetch_chart_data(symbol, time_selection):
     
     return t.history(period="1y", interval="1d")
 
+def get_session():
+    session = requests.Session()
+    # This makes the request look like it's coming from a standard Chrome browser
+    session.headers.update({
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+    })
+    return session
+
 @st.cache_resource(ttl=3600)
 def fetch_ticker_resource(symbol):
-    t = yf.Ticker(symbol)
+    t = yf.Ticker(symbol) 
+    
+    hist = t.history(period="1y")
+    if hist.empty: return None, None, None, 0.042, 0.0, 0.0, None, None
     hist = t.history(period="1y")
     if hist.empty: return None, None, None, 0.042, 0.0, 0.0
     
@@ -204,8 +261,7 @@ def fetch_ticker_resource(symbol):
         
     return t, t.options, hist["Close"].iloc[-1], rf_rate, m_t0, ivr, vols, hist
 
-
-# --- 4. SIDEBAR INPUTS ---
+# 4. SIDEBAR INPUTS
 with st.sidebar:
     st.header("Trade Parameters")
     ticker_input = st.text_input("Ticker Symbol", value="SPY").upper().strip()
@@ -251,13 +307,12 @@ with st.sidebar:
     st.info(f"Regime: **{regime}**\n\nTicker Gamma: **{dynamic_gamma}**\n\nShelf Duration: **{shelf} Days**")
 
     st.divider()
-    # ... (rest of sidebar stays the same)
     st.markdown("### Strategy Adjustment")
     target_price = st.number_input("Target Price ($)", value=float(spot_price))
     order_size = st.number_input("Contracts", value=1, min_value=1)
     stop_loss_pct = st.slider("Stop Loss (%)", 0, 100, 20) / 100
 
-# --- 5. PRE-CALCULATIONS & SHOCKS ---
+# 5. PRE-CALCULATIONS & SHOCKS
 premium = option_row["ask"] if option_row["ask"] > 0 else option_row["lastPrice"]
 days_to_exp = (pd.to_datetime(selected_exp) - pd.to_datetime("today")).days
 time_to_exp = max(days_to_exp, 1) / 365
@@ -283,8 +338,7 @@ if adj_periodic_iv <= 0: adj_periodic_iv = 0.0001
 
 bs_fair_value = calculate_black_scholes(spot_price, strike_price, time_to_exp, risk_free_rate, iv, trade_type)
 
-# --- NEW MATH: Risk-Neutral Drift ---
-# Calculates the expected directional drift of the stock based on the risk-free rate and volatility drag
+# Risk-Neutral Drift 
 drift = (risk_free_rate - 0.5 * adj_iv**2) * adj_time
 
 # Apply the drift to the Z-Score calculations
@@ -304,27 +358,25 @@ total_pnl = pnl_per_contract * order_size
 max_risk = premium * order_size * 100
 risk_factor = 1.0 if stop_loss_pct == 0.0 else stop_loss_pct
 
-# EV Calculation remains the same
+# EV
 ev = (t_prob * total_pnl) - (((1 - b_prob) * max_risk) * risk_factor)
 
-# --- NEW MATH: Projected Exit Premium ---
-# We calculate what the option will be worth at the END of your holding period
+# Projected Exit Premium 
 days_remaining_at_exit = max(0, days_to_exp - days_to_hold)
 time_remaining_at_exit = days_remaining_at_exit / 365
 
 projected_premium = calculate_black_scholes(
-    S=target_price,               # The price you hope it hits
-    K=strike_price,               # Your fixed strike
-    T=time_remaining_at_exit,     # The time left when you sell
-    r=risk_free_rate,             # Interest rate
-    sigma=projected_iv,           # Your Fear Z projected IV
+    S=target_price,               
+    K=strike_price,               
+    T=time_remaining_at_exit,     
+    r=risk_free_rate,             
+    sigma=projected_iv,           
     option_type=trade_type
 )
 
-# Calculate the projected ROI %
 projected_roi = ((projected_premium - premium) / premium) * 100 if premium > 0 else 0
 
-# --- 6. DASHBOARD METRICS (STACKED 4x4) ---
+# 6. DASHBOARD METRICS (STACKED 4x4)
 valuation_label = "Overvalued" if premium > bs_fair_value else "Undervalued"
 pct_diff = ((premium - bs_fair_value) / bs_fair_value * 100) if bs_fair_value > 0 else 0
 
@@ -343,10 +395,7 @@ r2[3].metric("Breakeven", f"${breakeven:.2f}")
 
 st.divider()
 
-# --- 6.5 LIVE MARKET CHART ---
-st.divider()
-
-# 1. Setup the Layout for Title and Dropdown
+# 6.5 LIVE MARKET CHART 
 chart_col1, chart_col2 = st.columns([4, 1])
 with chart_col1:
     st.subheader(f"Live Market Action: {ticker_input}")
@@ -354,16 +403,12 @@ with chart_col2:
     timeframe = st.selectbox(
         "Chart Timeframe",
         options=["1 Day", "5 Days", "1 Month", "6 Months", "1 Year", "5 Years"],
-        index=4 # Defaults to 1 Year
+        index=4 
     )
 
-# 2. Fetch the dynamic data specifically for the visual chart
 chart_data = fetch_chart_data(ticker_input, timeframe)
-
-# 3. Recalculate a dynamic SMA based on the data interval
 chart_data['SMA_21'] = chart_data['Close'].rolling(window=21).mean()
 
-# 4. Create Candlestick using the new dynamic chart_data
 fig_candle = go.Figure(data=[go.Candlestick(
     x=chart_data.index,
     open=chart_data['Open'],
@@ -371,11 +416,9 @@ fig_candle = go.Figure(data=[go.Candlestick(
     low=chart_data['Low'],
     close=chart_data['Close'],
     
-    # 1. COLOR LOGIC (Keep existing palette)
-    increasing_line_color='#00ffcc', # Cyan for Bullish
-    decreasing_line_color='#ff4b4b', # Red for Bearish
+    increasing_line_color='#00ffcc', 
+    decreasing_line_color='#ff4b4b', 
     
-    # 2. CUSTOM HOVER (Styled for readability)
     hovertemplate="""
     <span style='color:#bfa15d'><b>Date:</b></span> %{x}<br>
     <span style='color:#bfa15d'><b>Open:</b></span> $%{open:.2f}<br>
@@ -385,18 +428,16 @@ fig_candle = go.Figure(data=[go.Candlestick(
     
     name="Price"
 )])
-# Add Target and Breakeven visual anchors
+
 fig_candle.add_hline(y=target_price, line_dash="dash", line_color="#00ffcc", opacity=0.5)
 fig_candle.add_hline(y=breakeven, line_dash="solid", line_color="#ff4b4b", opacity=0.5)
-# Add the Moving Average
+
 fig_candle.add_trace(go.Scatter(
     x=chart_data.index, y=chart_data['SMA_21'], 
     mode='lines', line=dict(color='#bfa15d', width=1.5), 
     name='21-Period SMA'
 ))
 
-# --- NEW: Conditional Rangebreaks ---
-# Intraday gets hour & weekend filtering. Daily/Weekly only gets weekend filtering.
 if timeframe in ["1 Day", "5 Days"]:
     x_breaks = [
         dict(bounds=["sat", "mon"]), 
@@ -407,7 +448,6 @@ else:
         dict(bounds=["sat", "mon"])
     ]
 
-# Add a horizontal line for the current Spot Price
 fig_candle.add_hline(
     y=spot_price, 
     line_dash="dot", 
@@ -416,9 +456,6 @@ fig_candle.add_hline(
     annotation_position="bottom right"
 )
 
-# --- ADDING LEGEND-BASED PRICE ANCHORS ---
-
-# 1. Current Spot Price (Trace for Legend)
 fig_candle.add_trace(go.Scatter(
     x=[chart_data.index[-1]], 
     y=[spot_price],
@@ -428,7 +465,6 @@ fig_candle.add_trace(go.Scatter(
     hoverinfo="skip"
 ))
 
-# 2. Horizontal Line for the Current Price (Visual Anchor)
 fig_candle.add_hline(
     y=spot_price, 
     line_dash="dot", 
@@ -436,7 +472,6 @@ fig_candle.add_hline(
     opacity=0.8
 )
 
-# 3. Target Price Trace (Matches your Cyan theme)
 fig_candle.add_trace(go.Scatter(
     x=[chart_data.index[0], chart_data.index[-1]], 
     y=[target_price, target_price],
@@ -445,7 +480,6 @@ fig_candle.add_trace(go.Scatter(
     name=f"Target: ${target_price:.2f}"
 ))
 
-# 4. Breakeven Price Trace (Matches your Red theme)
 fig_candle.add_trace(go.Scatter(
     x=[chart_data.index[0], chart_data.index[-1]], 
     y=[breakeven, breakeven],
@@ -453,7 +487,7 @@ fig_candle.add_trace(go.Scatter(
     line=dict(color="#ff4b4b", width=2, dash="solid"),
     name=f"Breakeven: ${breakeven:.2f}"
 ))
-# Format to match your MyQuant dark theme
+
 fig_candle.update_layout(
     paper_bgcolor='rgba(0,0,0,0)', 
     plot_bgcolor='rgba(0,0,0,0)',
@@ -463,7 +497,7 @@ fig_candle.update_layout(
     yaxis=dict(title="Price ($)", gridcolor="rgba(255,255,255,0.1)"),
     xaxis=dict(
         gridcolor="rgba(255,255,255,0.1)",
-        rangebreaks=x_breaks # <--- APPLIED HERE
+        rangebreaks=x_breaks 
     ),
     legend=dict(
         orientation="h",
@@ -478,7 +512,7 @@ fig_candle.update_layout(
 st.plotly_chart(fig_candle, use_container_width=True)
 st.divider()
 
-# --- 7. INTERACTIVE LAYOUT (RESTORED EXACTLY) ---
+# 7. INTERACTIVE LAYOUT
 col_left, col_right = st.columns([2, 3])
 
 with col_left:
@@ -512,7 +546,6 @@ with col_left:
 
 with col_right:
     st.subheader("Interactive Price Projection")
-    # --- NEW MATH: Added 'drift' to the lognormal mean to synchronize with Black-Scholes probabilities ---
     sim_prices = np.random.lognormal(np.log(spot_price) + drift, adj_periodic_iv, 10000)
     p5, p95 = np.percentile(sim_prices, [5, 95])
     
@@ -584,39 +617,40 @@ with col_right:
     """, unsafe_allow_html=True)
 
 
-# --- 8. REGIME CLASSIFICATION LEGEND ---
+# 8. REGIME CLASSIFICATION LEGEND (UPDATED FOR MOBILE RESPONSIVENESS)
 st.divider()
 st.subheader("MyQuant's Behavioral Pipeline")
 
-st.markdown("""<div style="display: flex; justify-content: space-between; gap: 15px; text-align: left;">
-<div style="flex: 1; padding: 15px; background: rgba(0,0,0,0.2); border-radius: 6px; border-top: 3px solid #00ffcc;">
-<strong style="color: #00ffcc; font-size: 0.95rem;">1. The Input (IV Rank)</strong><br>
-<p style="font-size: 0.85rem; opacity: 0.8; margin-top: 5px; margin-bottom: 0;">
-The engine reads the stock's current Implied Volatility against its 1-year history to classify the true severity of the market panic.
-</p>
-</div>
-<div style="flex: 1; padding: 15px; background: rgba(0,0,0,0.2); border-radius: 6px; border-top: 3px solid #ff4b4b;">
-<strong style="color: #ff4b4b; font-size: 0.95rem;">2. Behavioral Math</strong><br>
-<p style="font-size: 0.85rem; opacity: 0.8; margin-top: 5px; margin-bottom: 0;">
-Applies Emotional Inertia and Momentum Drag to calculate if option premiums are frozen in a "Panic Plateau" and determines the amount of days it will take for volatility decay.
-</p>
-</div>
-<div style="flex: 1; padding: 15px; background: rgba(0,0,0,0.2); border-radius: 6px; border-top: 3px solid #FFC107;">
-<strong style="color: #FFC107; font-size: 0.95rem;">3. Smart Projection</strong><br>
-<p style="font-size: 0.85rem; opacity: 0.8; margin-top: 5px; margin-bottom: 0;">
-The model predicts the exact percentage that Volatility will crush over your specific holding period (The Suggested Shock) and applies it to the manual adjustments.
-</p>
-</div>
-<div style="flex: 1; padding: 15px; background: rgba(0,0,0,0.2); border-radius: 6px; border-top: 3px solid #bfa15d;">
-<strong style="color: #bfa15d; font-size: 0.95rem;">4. Adjusted EV and Price Distribution</strong><br>
-<p style="font-size: 0.85rem; opacity: 0.8; margin-top: 5px; margin-bottom: 0;">
-Black-Scholes runs using the fear-adjusted IV, outputting a highly accurate Expected Value and price probability distribution via Monte Carlo Simulation calculating 10,000 possible scenarios.
-</p>
-</div>
+st.markdown("""
+<div class="pipeline-container">
+    <div class="pipeline-box" style="border-top: 3px solid #00ffcc;">
+        <strong style="color: #00ffcc; font-size: 0.95rem;">1. The Input (IV Rank)</strong><br>
+        <p style="font-size: 0.85rem; opacity: 0.8; margin-top: 5px; margin-bottom: 0;">
+            The engine reads the stock's current Implied Volatility against its 1-year history to classify the true severity of the market panic.
+        </p>
+    </div>
+    <div class="pipeline-box" style="border-top: 3px solid #ff4b4b;">
+        <strong style="color: #ff4b4b; font-size: 0.95rem;">2. Behavioral Math</strong><br>
+        <p style="font-size: 0.85rem; opacity: 0.8; margin-top: 5px; margin-bottom: 0;">
+            Applies Emotional Inertia and Momentum Drag to calculate if option premiums are frozen in a "Panic Plateau" and determines the amount of days it will take for volatility decay.
+        </p>
+    </div>
+    <div class="pipeline-box" style="border-top: 3px solid #FFC107;">
+        <strong style="color: #FFC107; font-size: 0.95rem;">3. Smart Projection</strong><br>
+        <p style="font-size: 0.85rem; opacity: 0.8; margin-top: 5px; margin-bottom: 0;">
+            The model predicts the exact percentage that Volatility will crush over your specific holding period (The Suggested Shock) and applies it to the manual adjustments.
+        </p>
+    </div>
+    <div class="pipeline-box" style="border-top: 3px solid #bfa15d;">
+        <strong style="color: #bfa15d; font-size: 0.95rem;">4. Adjusted EV and Price Distribution</strong><br>
+        <p style="font-size: 0.85rem; opacity: 0.8; margin-top: 5px; margin-bottom: 0;">
+            Black-Scholes runs using the fear-adjusted IV, outputting a highly accurate Expected Value and price probability distribution via Monte Carlo Simulation calculating 10,000 possible scenarios.
+        </p>
+    </div>
 </div><br>""", unsafe_allow_html=True)
+
 st.subheader("Fear Z Regime Guide")
 
-# DEBUGGED: Removed trailing comma causing tuple unpacking error
 guide_c1, guide_c2, guide_c3 = st.columns(3)
 
 with guide_c1:
