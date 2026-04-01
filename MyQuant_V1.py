@@ -89,6 +89,14 @@ st.markdown("""
         margin: 0;
         line-height: 1;
     }
+    .logo-text-span {
+            font-family: 'Times New Roman', Times, serif;
+        color: #bfa15d;
+        letter-spacing: 0.6rem;
+        font-size: 2.5rem; /* INCREASED: From 1.1rem to 1.5rem */
+        text-transform: uppercase;
+        margin: 0;
+        line-height: 1;
     }
     .title-col {
         flex: 1;
@@ -137,7 +145,9 @@ st.markdown("""
 st.markdown("""
     <div class="branding-row">
         <div class="logo-col">
-            <p class="logo-text-kern">KERN.</p>
+            <span class="logo-text-span">
+                <p class="logo-text-kern">KERN.</p>
+            </span>
         </div>
         <div class="title-col">
             <div class="main-title-text">MyQuant | Advanced Options Analytics</div>
