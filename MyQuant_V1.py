@@ -160,6 +160,26 @@ def calculate_black_scholes(S, K, T, r, sigma, option_type="Call"):
         return (S * norm.cdf(d1)) - (K * np.exp(-r * T) * norm.cdf(d2))
     return (K * np.exp(-r * T) * norm.cdf(-d2)) - (S * norm.cdf(-d1))
 
+@st.cache_data(ttl=900) # Caches chart data for 15 mins to stay fast but live
+def fetch_chart_data(symbol, time_selection):
+    t = yf.Ticker(symbol)
+    
+    # yfinance requires different intervals for short timeframes to show actual candles
+    if time_selection == "1 Day":
+        return t.history(period="1d", interval="5m")
+    elif time_selection == "5 Days":
+        return t.history(period="5d", interval="30m")
+    elif time_selection == "1 Month":
+        return t.history(period="1mo", interval="1d")
+    elif time_selection == "6 Months":
+        return t.history(period="6mo", interval="1d")
+    elif time_selection == "1 Year":
+        return t.history(period="1y", interval="1d")
+    elif time_selection == "5 Years":
+        return t.history(period="5y", interval="1wk")
+    
+    return t.history(period="1y", interval="1d")
+
 @st.cache_resource(ttl=3600)
 def fetch_ticker_resource(symbol):
     t = yf.Ticker(symbol)
@@ -182,7 +202,7 @@ def fetch_ticker_resource(symbol):
     except:
         rf_rate = 0.042 
         
-    return t, t.options, hist["Close"].iloc[-1], rf_rate, m_t0, ivr, vols
+    return t, t.options, hist["Close"].iloc[-1], rf_rate, m_t0, ivr, vols, hist
 
 
 # --- 4. SIDEBAR INPUTS ---
@@ -194,7 +214,7 @@ with st.sidebar:
         st.stop()
     
     # 1. NEW UNPACKING (Added vol_history)
-    ticker_obj, expirations, spot_price, risk_free_rate, m_t0, auto_ivr, vol_history = fetch_ticker_resource(ticker_input)
+    ticker_obj, expirations, spot_price, risk_free_rate, m_t0, auto_ivr, vol_history, hist_data = fetch_ticker_resource(ticker_input)
     
     if ticker_obj is None or not expirations:
         st.error(f"No data found for '{ticker_input}'. Please check the symbol.")
@@ -321,6 +341,141 @@ r2[1].metric("Fear Z Shelf", f"{shelf}d", delta=regime, delta_color="off")
 r2[2].metric("Expected Value", f"${ev:.2f}")
 r2[3].metric("Breakeven", f"${breakeven:.2f}")
 
+st.divider()
+
+# --- 6.5 LIVE MARKET CHART ---
+st.divider()
+
+# 1. Setup the Layout for Title and Dropdown
+chart_col1, chart_col2 = st.columns([4, 1])
+with chart_col1:
+    st.subheader(f"Live Market Action: {ticker_input}")
+with chart_col2:
+    timeframe = st.selectbox(
+        "Chart Timeframe",
+        options=["1 Day", "5 Days", "1 Month", "6 Months", "1 Year", "5 Years"],
+        index=4 # Defaults to 1 Year
+    )
+
+# 2. Fetch the dynamic data specifically for the visual chart
+chart_data = fetch_chart_data(ticker_input, timeframe)
+
+# 3. Recalculate a dynamic SMA based on the data interval
+chart_data['SMA_21'] = chart_data['Close'].rolling(window=21).mean()
+
+# 4. Create Candlestick using the new dynamic chart_data
+fig_candle = go.Figure(data=[go.Candlestick(
+    x=chart_data.index,
+    open=chart_data['Open'],
+    high=chart_data['High'],
+    low=chart_data['Low'],
+    close=chart_data['Close'],
+    
+    # 1. COLOR LOGIC (Keep existing palette)
+    increasing_line_color='#00ffcc', # Cyan for Bullish
+    decreasing_line_color='#ff4b4b', # Red for Bearish
+    
+    # 2. CUSTOM HOVER (Styled for readability)
+    hovertemplate="""
+    <span style='color:#bfa15d'><b>Date:</b></span> %{x}<br>
+    <span style='color:#bfa15d'><b>Open:</b></span> $%{open:.2f}<br>
+    <span style='color:#bfa15d'><b>Close:</b></span> $%{close:.2f}<br>
+    <span style='color:#bfa15d'><b>Range:</b></span> $%{low:.2f} - $%{high:.2f}
+    <extra></extra>""",
+    
+    name="Price"
+)])
+# Add Target and Breakeven visual anchors
+fig_candle.add_hline(y=target_price, line_dash="dash", line_color="#00ffcc", opacity=0.5)
+fig_candle.add_hline(y=breakeven, line_dash="solid", line_color="#ff4b4b", opacity=0.5)
+# Add the Moving Average
+fig_candle.add_trace(go.Scatter(
+    x=chart_data.index, y=chart_data['SMA_21'], 
+    mode='lines', line=dict(color='#bfa15d', width=1.5), 
+    name='21-Period SMA'
+))
+
+# --- NEW: Conditional Rangebreaks ---
+# Intraday gets hour & weekend filtering. Daily/Weekly only gets weekend filtering.
+if timeframe in ["1 Day", "5 Days"]:
+    x_breaks = [
+        dict(bounds=["sat", "mon"]), 
+        dict(bounds=[16, 9.5], pattern="hour") 
+    ]
+else:
+    x_breaks = [
+        dict(bounds=["sat", "mon"])
+    ]
+
+# Add a horizontal line for the current Spot Price
+fig_candle.add_hline(
+    y=spot_price, 
+    line_dash="dot", 
+    line_color="#bfa15d", 
+    annotation_text=f"  Current: ${spot_price:.2f}", 
+    annotation_position="bottom right"
+)
+
+# --- ADDING LEGEND-BASED PRICE ANCHORS ---
+
+# 1. Current Spot Price (Trace for Legend)
+fig_candle.add_trace(go.Scatter(
+    x=[chart_data.index[-1]], 
+    y=[spot_price],
+    mode="markers",
+    marker=dict(color="#bfa15d", size=10, symbol="diamond"),
+    name=f"Current: ${spot_price:.2f}",
+    hoverinfo="skip"
+))
+
+# 2. Horizontal Line for the Current Price (Visual Anchor)
+fig_candle.add_hline(
+    y=spot_price, 
+    line_dash="dot", 
+    line_color="#bfa15d", 
+    opacity=0.8
+)
+
+# 3. Target Price Trace (Matches your Cyan theme)
+fig_candle.add_trace(go.Scatter(
+    x=[chart_data.index[0], chart_data.index[-1]], 
+    y=[target_price, target_price],
+    mode="lines",
+    line=dict(color="#00ffcc", width=2, dash="dash"),
+    name=f"Target: ${target_price:.2f}"
+))
+
+# 4. Breakeven Price Trace (Matches your Red theme)
+fig_candle.add_trace(go.Scatter(
+    x=[chart_data.index[0], chart_data.index[-1]], 
+    y=[breakeven, breakeven],
+    mode="lines",
+    line=dict(color="#ff4b4b", width=2, dash="solid"),
+    name=f"Breakeven: ${breakeven:.2f}"
+))
+# Format to match your MyQuant dark theme
+fig_candle.update_layout(
+    paper_bgcolor='rgba(0,0,0,0)', 
+    plot_bgcolor='rgba(0,0,0,0)',
+    xaxis_rangeslider_visible=False,
+    margin=dict(l=0, r=0, t=10, b=0),
+    hovermode="x unified",
+    yaxis=dict(title="Price ($)", gridcolor="rgba(255,255,255,0.1)"),
+    xaxis=dict(
+        gridcolor="rgba(255,255,255,0.1)",
+        rangebreaks=x_breaks # <--- APPLIED HERE
+    ),
+    legend=dict(
+        orientation="h",
+        yanchor="bottom",
+        y=1.02,
+        xanchor="right",
+        x=1,
+        bgcolor="rgba(0,0,0,0)"
+    )
+)
+
+st.plotly_chart(fig_candle, use_container_width=True)
 st.divider()
 
 # --- 7. INTERACTIVE LAYOUT (RESTORED EXACTLY) ---
