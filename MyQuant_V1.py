@@ -4,7 +4,7 @@ import pandas as pd
 import numpy as np
 from scipy.stats import norm
 import plotly.graph_objects as go
-
+import requests
 # --- 1. FEAR Z BEHAVIORAL ENGINE ---
 # --- 1. FEAR Z BEHAVIORAL ENGINE ---
 class FearZEngine:
@@ -180,9 +180,17 @@ def fetch_chart_data(symbol, time_selection):
     
     return t.history(period="1y", interval="1d")
 
+def get_session():
+    session = requests.Session()
+    # This makes the request look like it's coming from a standard Chrome browser
+    session.headers.update({
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+    })
+    return session
 @st.cache_resource(ttl=3600)
 def fetch_ticker_resource(symbol):
-    t = yf.Ticker(symbol)
+    session = get_session()
+    t = yf.Ticker(symbol, session=session)
     hist = t.history(period="1y")
     if hist.empty: return None, None, None, 0.042, 0.0, 0.0
     
