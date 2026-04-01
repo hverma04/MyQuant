@@ -189,8 +189,10 @@ def get_session():
     return session
 @st.cache_resource(ttl=3600)
 def fetch_ticker_resource(symbol):
-    session = get_session()
-    t = yf.Ticker(symbol, session=session)
+    t = yf.Ticker(symbol) 
+    
+    hist = t.history(period="1y")
+    if hist.empty: return None, None, None, 0.042, 0.0, 0.0, None, None
     hist = t.history(period="1y")
     if hist.empty: return None, None, None, 0.042, 0.0, 0.0
     
