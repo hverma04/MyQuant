@@ -5,8 +5,7 @@ import numpy as np
 from scipy.stats import norm
 import plotly.graph_objects as go
 import requests
-# --- 1. FEAR Z BEHAVIORAL ENGINE ---
-# --- 1. FEAR Z BEHAVIORAL ENGINE ---
+#1. FEAR Z BEHAVIORAL ENGINE
 class FearZEngine:
     def __init__(self):
         self.params = {
@@ -49,7 +48,6 @@ class FearZEngine:
         # 3. CRITICAL: Return BOTH values as a tuple so the sidebar can 'unpack' them
         return round(z_days, 1), round(gamma, 3)
 
-    # ... (keep get_projection exactly as it was)
 
     def get_projection(self, t_days, current_iv, m_t0, z, category):
         p = self.params[category]
@@ -65,7 +63,7 @@ class FearZEngine:
         decay = current_iv * np.exp(-adjusted_lam * t_delta)
         return round(decay, 4)
 
-# --- 2. PAGE SETUP & CSS (RESTORED EXACTLY) ---
+#2. PAGE SETUP & CSS (RESTORED EXACTLY)
 st.set_page_config(page_title="MyQuant Analytics", layout="wide")
 
 st.markdown("""
@@ -135,7 +133,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- BRANDED HEADER RENDERING ---
+#BRANDED HEADER RENDERING
 st.markdown("""
     <div class="branding-row">
         <div class="logo-col">
@@ -150,7 +148,7 @@ st.markdown("""
 
 st.divider()
 
-# --- 3. MATH & DATA FETCHING ---
+#3. MATH & DATA FETCHING
 def calculate_black_scholes(S, K, T, r, sigma, option_type="Call"):
     if T <= 0 or sigma <= 0:
         return max(0, S - K) if option_type == "Call" else max(0, K - S)
@@ -215,7 +213,7 @@ def fetch_ticker_resource(symbol):
     return t, t.options, hist["Close"].iloc[-1], rf_rate, m_t0, ivr, vols, hist
 
 
-# --- 4. SIDEBAR INPUTS ---
+#4. SIDEBAR INPUTS
 with st.sidebar:
     st.header("Trade Parameters")
     ticker_input = st.text_input("Ticker Symbol", value="SPY").upper().strip()
@@ -261,13 +259,12 @@ with st.sidebar:
     st.info(f"Regime: **{regime}**\n\nTicker Gamma: **{dynamic_gamma}**\n\nShelf Duration: **{shelf} Days**")
 
     st.divider()
-    # ... (rest of sidebar stays the same)
     st.markdown("### Strategy Adjustment")
     target_price = st.number_input("Target Price ($)", value=float(spot_price))
     order_size = st.number_input("Contracts", value=1, min_value=1)
     stop_loss_pct = st.slider("Stop Loss (%)", 0, 100, 20) / 100
 
-# --- 5. PRE-CALCULATIONS & SHOCKS ---
+#5. PRE-CALCULATIONS & SHOCKS
 premium = option_row["ask"] if option_row["ask"] > 0 else option_row["lastPrice"]
 days_to_exp = (pd.to_datetime(selected_exp) - pd.to_datetime("today")).days
 time_to_exp = max(days_to_exp, 1) / 365
@@ -293,7 +290,7 @@ if adj_periodic_iv <= 0: adj_periodic_iv = 0.0001
 
 bs_fair_value = calculate_black_scholes(spot_price, strike_price, time_to_exp, risk_free_rate, iv, trade_type)
 
-# --- NEW MATH: Risk-Neutral Drift ---
+# Risk-Neutral Drift 
 # Calculates the expected directional drift of the stock based on the risk-free rate and volatility drag
 drift = (risk_free_rate - 0.5 * adj_iv**2) * adj_time
 
@@ -314,10 +311,10 @@ total_pnl = pnl_per_contract * order_size
 max_risk = premium * order_size * 100
 risk_factor = 1.0 if stop_loss_pct == 0.0 else stop_loss_pct
 
-# EV Calculation remains the same
+# EV
 ev = (t_prob * total_pnl) - (((1 - b_prob) * max_risk) * risk_factor)
 
-# --- NEW MATH: Projected Exit Premium ---
+#Projected Exit Premium 
 # We calculate what the option will be worth at the END of your holding period
 days_remaining_at_exit = max(0, days_to_exp - days_to_hold)
 time_remaining_at_exit = days_remaining_at_exit / 365
@@ -334,7 +331,7 @@ projected_premium = calculate_black_scholes(
 # Calculate the projected ROI %
 projected_roi = ((projected_premium - premium) / premium) * 100 if premium > 0 else 0
 
-# --- 6. DASHBOARD METRICS (STACKED 4x4) ---
+#6. DASHBOARD METRICS (STACKED 4x4)
 valuation_label = "Overvalued" if premium > bs_fair_value else "Undervalued"
 pct_diff = ((premium - bs_fair_value) / bs_fair_value * 100) if bs_fair_value > 0 else 0
 
@@ -353,10 +350,10 @@ r2[3].metric("Breakeven", f"${breakeven:.2f}")
 
 st.divider()
 
-# --- 6.5 LIVE MARKET CHART ---
+# 6.5 LIVE MARKET CHART 
 st.divider()
 
-# 1. Setup the Layout for Title and Dropdown
+# Setup the Layout for Title and Dropdown
 chart_col1, chart_col2 = st.columns([4, 1])
 with chart_col1:
     st.subheader(f"Live Market Action: {ticker_input}")
@@ -367,13 +364,13 @@ with chart_col2:
         index=4 # Defaults to 1 Year
     )
 
-# 2. Fetch the dynamic data specifically for the visual chart
+# Fetch the dynamic data specifically for the visual chart
 chart_data = fetch_chart_data(ticker_input, timeframe)
 
-# 3. Recalculate a dynamic SMA based on the data interval
+# Recalculate a dynamic SMA based on the data interval
 chart_data['SMA_21'] = chart_data['Close'].rolling(window=21).mean()
 
-# 4. Create Candlestick using the new dynamic chart_data
+# Create Candlestick using the new dynamic chart_data
 fig_candle = go.Figure(data=[go.Candlestick(
     x=chart_data.index,
     open=chart_data['Open'],
@@ -381,7 +378,7 @@ fig_candle = go.Figure(data=[go.Candlestick(
     low=chart_data['Low'],
     close=chart_data['Close'],
     
-    # 1. COLOR LOGIC (Keep existing palette)
+
     increasing_line_color='#00ffcc', # Cyan for Bullish
     decreasing_line_color='#ff4b4b', # Red for Bearish
     
@@ -405,7 +402,7 @@ fig_candle.add_trace(go.Scatter(
     name='21-Period SMA'
 ))
 
-# --- NEW: Conditional Rangebreaks ---
+# Conditional Rangebreaks 
 # Intraday gets hour & weekend filtering. Daily/Weekly only gets weekend filtering.
 if timeframe in ["1 Day", "5 Days"]:
     x_breaks = [
@@ -426,7 +423,7 @@ fig_candle.add_hline(
     annotation_position="bottom right"
 )
 
-# --- ADDING LEGEND-BASED PRICE ANCHORS ---
+#ADDING LEGEND-BASED PRICE ANCHORS 
 
 # 1. Current Spot Price (Trace for Legend)
 fig_candle.add_trace(go.Scatter(
@@ -473,7 +470,7 @@ fig_candle.update_layout(
     yaxis=dict(title="Price ($)", gridcolor="rgba(255,255,255,0.1)"),
     xaxis=dict(
         gridcolor="rgba(255,255,255,0.1)",
-        rangebreaks=x_breaks # <--- APPLIED HERE
+        rangebreaks=x_breaks 
     ),
     legend=dict(
         orientation="h",
@@ -488,7 +485,7 @@ fig_candle.update_layout(
 st.plotly_chart(fig_candle, use_container_width=True)
 st.divider()
 
-# --- 7. INTERACTIVE LAYOUT (RESTORED EXACTLY) ---
+# 7. INTERACTIVE LAYOUT (RESTORED EXACTLY) 
 col_left, col_right = st.columns([2, 3])
 
 with col_left:
@@ -522,7 +519,7 @@ with col_left:
 
 with col_right:
     st.subheader("Interactive Price Projection")
-    # --- NEW MATH: Added 'drift' to the lognormal mean to synchronize with Black-Scholes probabilities ---
+    # Added 'drift' to the lognormal mean to synchronize with Black-Scholes probabilities ---
     sim_prices = np.random.lognormal(np.log(spot_price) + drift, adj_periodic_iv, 10000)
     p5, p95 = np.percentile(sim_prices, [5, 95])
     
@@ -594,7 +591,7 @@ with col_right:
     """, unsafe_allow_html=True)
 
 
-# --- 8. REGIME CLASSIFICATION LEGEND ---
+# 8. REGIME CLASSIFICATION LEGEND
 st.divider()
 st.subheader("MyQuant's Behavioral Pipeline")
 
