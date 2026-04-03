@@ -175,6 +175,15 @@ st.markdown("""
         color: #bfa15d !important;
         font-weight: bold;
         justify-content: center;
+            
+    @media (max-width: 768px) {
+    /* Force the metric columns to display as a 2-column grid on mobile */
+    [data-testid="column"] {
+        width: 50% !important;
+        flex: 1 1 50% !important;
+        min-width: 50% !important;
+    }
+}
     }
     </style>
     """, unsafe_allow_html=True)
@@ -193,6 +202,78 @@ st.markdown("""
         </div>
     </div>
     """, unsafe_allow_html=True)
+
+# --- NEW LEARN MORE EXPANDER ---
+with st.expander("Learn More: MyQuant Behavioral Engine & Regime Guide"):
+    st.subheader("MyQuant's Behavioral Pipeline")
+
+    st.markdown("""
+    <div class="pipeline-container">
+        <div class="pipeline-box" style="border-top: 3px solid #00ffcc;">
+            <strong style="color: #00ffcc; font-size: 0.95rem;">1. The Input (IV Rank)</strong><br>
+            <p style="font-size: 0.85rem; opacity: 0.8; margin-top: 5px; margin-bottom: 0;">
+                The engine reads the stock's current Implied Volatility against its 1-year history to classify the true severity of the market panic.
+            </p>
+        </div>
+        <div class="pipeline-box" style="border-top: 3px solid #ff4b4b;">
+            <strong style="color: #ff4b4b; font-size: 0.95rem;">2. Behavioral Math</strong><br>
+            <p style="font-size: 0.85rem; opacity: 0.8; margin-top: 5px; margin-bottom: 0;">
+                Applies Emotional Inertia and Momentum Drag to calculate if option premiums are frozen in a "Panic Plateau" and determines the amount of days it will take for volatility decay.
+            </p>
+        </div>
+        <div class="pipeline-box" style="border-top: 3px solid #FFC107;">
+            <strong style="color: #FFC107; font-size: 0.95rem;">3. Smart Projection</strong><br>
+            <p style="font-size: 0.85rem; opacity: 0.8; margin-top: 5px; margin-bottom: 0;">
+                The model predicts the exact percentage that Volatility will crush over your specific holding period (The Suggested Shock) and applies it to the manual adjustments.
+            </p>
+        </div>
+        <div class="pipeline-box" style="border-top: 3px solid #bfa15d;">
+            <strong style="color: #bfa15d; font-size: 0.95rem;">4. Adjusted EV and Price Distribution</strong><br>
+            <p style="font-size: 0.85rem; opacity: 0.8; margin-top: 5px; margin-bottom: 0;">
+                Black-Scholes runs using the fear-adjusted IV, outputting a highly accurate Expected Value and price probability distribution via Monte Carlo Simulation calculating 10,000 possible scenarios.
+            </p>
+        </div>
+    </div><br>""", unsafe_allow_html=True)
+
+    st.subheader("Fear Z Regime Guide")
+
+    guide_c1, guide_c2, guide_c3 = st.columns(3)
+
+    with guide_c1:
+        st.markdown("""
+    <div style="background-color: rgba(191, 161, 93, 0.05); padding: 15px; border-radius: 8px; border-left: 4px solid #4CAF50; height: 100%;">
+        <h4 style="margin-top:0; color: var(--text-color);">🟢 Episodic (IVR 0-69)</h4>
+        <p style="font-size: 0.9rem; opacity: 0.8; margin-bottom: 0;">
+            <strong>Contained</strong><br>
+            Standard market reaction to typical news. Fear is fleeting, the Panic Plateau is non-existent, and volatility decays rapidly back to its baseline.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    with guide_c2:
+        st.markdown("""
+    <div style="background-color: rgba(191, 161, 93, 0.05); padding: 15px; border-radius: 8px; border-left: 4px solid #FFC107; height: 100%;">
+        <h4 style="margin-top:0; color: var(--text-color);">🟡 Structural (IVR 70-89)</h4>
+        <p style="font-size: 0.9rem; opacity: 0.8; margin-bottom: 0;">
+            <strong>Regime Uncertainty</strong><br>
+            Investors are fundamentally questioning the stock's valuation. Triggers a moderate "Panic Plateau" where option premiums freeze before beginning a slow decay.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    with guide_c3:
+        st.markdown("""
+    <div style="background-color: rgba(191, 161, 93, 0.05); padding: 15px; border-radius: 8px; border-left: 4px solid #ff4b4b; height: 100%;">
+        <h4 style="margin-top:0; color: var(--text-color);">🔴 Systemic (IVR 90+)</h4>
+        <p style="font-size: 0.9rem; opacity: 0.8; margin-bottom: 0;">
+            <strong>Crisis Detection</strong><br>
+            Peak market panic and capitulation. Creates a massive "Shelf" where implied volatility stays artificially inflated for days due to deep behavioral uncertainty.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+    st.divider()
+# 3. MATH & DATA FETCHING
+# ... (Resume script from here))
 
 st.divider()
 
@@ -509,21 +590,28 @@ fig_candle.update_layout(
     )
 )
 
-st.plotly_chart(fig_candle, use_container_width=True)
+st.plotly_chart(fig_candle, use_container_width=True, config={'scrollZoom': False, 'displayModeBar': False})
 st.divider()
 
 # 7. INTERACTIVE LAYOUT
 col_left, col_right = st.columns([2, 3])
 
 with col_left:
-    st.subheader("Probability Summary")
-    prob_data = {
-        "Level": ["Target Price", "Strike Price", "Breakeven"],
-        "Price": [f"${target_price:.2f}", f"${strike_price:.2f}", f"${breakeven:.2f}"],
-        "Probability to Reach": [f"{t_prob:.2%}", f"{s_prob:.2%}", f"{b_prob:.2%}"]
-    }
-    st.table(pd.DataFrame(prob_data))
+    with col_left:
+        st.subheader("Probability Summary")
+        prob_data = {
+            "Level": ["Target Price", "Strike Price", "Breakeven"],
+            "Price": [f"${target_price:.2f}", f"${strike_price:.2f}", f"${breakeven:.2f}"],
+            "Probability to Reach": [f"{t_prob:.2%}", f"{s_prob:.2%}", f"{b_prob:.2%}"]
+        }
     
+    # Change this:
+    # st.table(pd.DataFrame(prob_data))
+    
+    # To this:
+    st.dataframe(pd.DataFrame(prob_data), hide_index=True, use_container_width=True)
+    
+    # ... rest of the code remains the same
     st.subheader("Trade Analysis")
     actual_risk_per_cnt = premium * risk_factor
     potential_profit = max(0, target_price - breakeven) if trade_type == "Call" else max(0, breakeven - target_price)
@@ -600,7 +688,7 @@ with col_right:
         )
     )
     
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, use_container_width=True, config={'scrollZoom': False, 'displayModeBar': False})
 
     prob_hit_target = (sim_prices >= target_price).mean() if trade_type == "Call" else (sim_prices <= target_price).mean()
     
@@ -619,72 +707,5 @@ with col_right:
 
 # 8. REGIME CLASSIFICATION LEGEND (UPDATED FOR MOBILE RESPONSIVENESS)
 st.divider()
-st.subheader("MyQuant's Behavioral Pipeline")
-
-st.markdown("""
-<div class="pipeline-container">
-    <div class="pipeline-box" style="border-top: 3px solid #00ffcc;">
-        <strong style="color: #00ffcc; font-size: 0.95rem;">1. The Input (IV Rank)</strong><br>
-        <p style="font-size: 0.85rem; opacity: 0.8; margin-top: 5px; margin-bottom: 0;">
-            The engine reads the stock's current Implied Volatility against its 1-year history to classify the true severity of the market panic.
-        </p>
-    </div>
-    <div class="pipeline-box" style="border-top: 3px solid #ff4b4b;">
-        <strong style="color: #ff4b4b; font-size: 0.95rem;">2. Behavioral Math</strong><br>
-        <p style="font-size: 0.85rem; opacity: 0.8; margin-top: 5px; margin-bottom: 0;">
-            Applies Emotional Inertia and Momentum Drag to calculate if option premiums are frozen in a "Panic Plateau" and determines the amount of days it will take for volatility decay.
-        </p>
-    </div>
-    <div class="pipeline-box" style="border-top: 3px solid #FFC107;">
-        <strong style="color: #FFC107; font-size: 0.95rem;">3. Smart Projection</strong><br>
-        <p style="font-size: 0.85rem; opacity: 0.8; margin-top: 5px; margin-bottom: 0;">
-            The model predicts the exact percentage that Volatility will crush over your specific holding period (The Suggested Shock) and applies it to the manual adjustments.
-        </p>
-    </div>
-    <div class="pipeline-box" style="border-top: 3px solid #bfa15d;">
-        <strong style="color: #bfa15d; font-size: 0.95rem;">4. Adjusted EV and Price Distribution</strong><br>
-        <p style="font-size: 0.85rem; opacity: 0.8; margin-top: 5px; margin-bottom: 0;">
-            Black-Scholes runs using the fear-adjusted IV, outputting a highly accurate Expected Value and price probability distribution via Monte Carlo Simulation calculating 10,000 possible scenarios.
-        </p>
-    </div>
-</div><br>""", unsafe_allow_html=True)
-
-st.subheader("Fear Z Regime Guide")
-
-guide_c1, guide_c2, guide_c3 = st.columns(3)
-
-with guide_c1:
-    st.markdown("""
-<div style="background-color: rgba(191, 161, 93, 0.05); padding: 15px; border-radius: 8px; border-left: 4px solid #4CAF50; height: 100%;">
-    <h4 style="margin-top:0; color: var(--text-color);">🟢 Episodic (IVR 0-69)</h4>
-    <p style="font-size: 0.9rem; opacity: 0.8; margin-bottom: 0;">
-        <strong>Contained</strong><br>
-        Standard market reaction to typical news. Fear is fleeting, the Panic Plateau is non-existent, and volatility decays rapidly back to its baseline.
-    </p>
-</div>
-""", unsafe_allow_html=True)
-
-with guide_c2:
-    st.markdown("""
-<div style="background-color: rgba(191, 161, 93, 0.05); padding: 15px; border-radius: 8px; border-left: 4px solid #FFC107; height: 100%;">
-    <h4 style="margin-top:0; color: var(--text-color);">🟡 Structural (IVR 70-89)</h4>
-    <p style="font-size: 0.9rem; opacity: 0.8; margin-bottom: 0;">
-        <strong>Regime Uncertainty</strong><br>
-        Investors are fundamentally questioning the stock's valuation. Triggers a moderate "Panic Plateau" where option premiums freeze before beginning a slow decay.
-    </p>
-</div>
-""", unsafe_allow_html=True)
-
-with guide_c3:
-    st.markdown("""
-<div style="background-color: rgba(191, 161, 93, 0.05); padding: 15px; border-radius: 8px; border-left: 4px solid #ff4b4b; height: 100%;">
-    <h4 style="margin-top:0; color: var(--text-color);">🔴 Systemic (IVR 90+)</h4>
-    <p style="font-size: 0.9rem; opacity: 0.8; margin-bottom: 0;">
-        <strong>Crisis Detection</strong><br>
-        Peak market panic and capitulation. Creates a massive "Shelf" where implied volatility stays artificially inflated for days due to deep behavioral uncertainty.
-    </p>
-</div>
-""", unsafe_allow_html=True)
-
 
     # python -m streamlit run MyQuant_V1.py
