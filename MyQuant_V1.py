@@ -287,9 +287,13 @@ def calculate_black_scholes(S, K, T, r, sigma, option_type="Call"):
         return (S * norm.cdf(d1)) - (K * np.exp(-r * T) * norm.cdf(d2))
     return (K * np.exp(-r * T) * norm.cdf(-d2)) - (S * norm.cdf(-d1))
 
-@st.cache_data(ttl=900) # Caches chart data for 15 mins to stay fast but live
+@st.cache_data(ttl=900) 
 def fetch_chart_data(symbol, time_selection):
-    t = yf.Ticker(symbol)
+    t = yf.Ticker(symbol) # No session needed here either
+    
+    if time_selection == "1 Day":
+        return t.history(period="1d", interval="5m")
+    # ... etc ...
     
     # yfinance requires different intervals for short timeframes to show actual candles
     if time_selection == "1 Day":
@@ -318,14 +322,13 @@ def get_session():
 # UPDATE THIS FUNCTION in Section 3
 @st.cache_resource(ttl=3600)
 def fetch_ticker_resource(symbol):
-    # Create a custom session with a browser-like User-Agent
-    session = requests.Session()
-    session.headers.update({
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36'
-    })
+    # REMOVE the session lines. yfinance 1.2.0 handles this internally now.
+    t = yf.Ticker(symbol) 
     
-    # Pass the session directly into the Ticker object
-    t = yf.Ticker(symbol, session=session) 
+    hist = t.history(period="1y")
+    if hist.empty: return None, None, None, 0.042, 0.0, 0.0, None, None
+    
+    # ... the rest of your logic remains the same ...
     
     # ... rest of your code ...
     
