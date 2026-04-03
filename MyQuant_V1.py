@@ -315,9 +315,19 @@ def get_session():
     })
     return session
 
+# UPDATE THIS FUNCTION in Section 3
 @st.cache_resource(ttl=3600)
 def fetch_ticker_resource(symbol):
-    t = yf.Ticker(symbol) 
+    # Create a custom session with a browser-like User-Agent
+    session = requests.Session()
+    session.headers.update({
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36'
+    })
+    
+    # Pass the session directly into the Ticker object
+    t = yf.Ticker(symbol, session=session) 
+    
+    # ... rest of your code ...
     
     hist = t.history(period="1y")
     if hist.empty: return None, None, None, 0.042, 0.0, 0.0, None, None
