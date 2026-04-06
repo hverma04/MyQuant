@@ -278,6 +278,20 @@ with st.expander("Learn More: MyQuant Behavioral Engine & Regime Guide"):
 st.divider()
 
 # 3. MATH & DATA FETCHING
+
+# --- SECTION 3: MATH & DATA FETCHING ---
+
+def get_session():
+    """Creates a persistent session to bypass Yahoo Finance rate limits."""
+    session = requests.Session()
+    session.headers.update({
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+    })
+    return session
+
+# Initialize the global session
+yf_session = get_session()
+
 def calculate_black_scholes(S, K, T, r, sigma, option_type="Call"):
     if T <= 0 or sigma <= 0:
         return max(0, S - K) if option_type == "Call" else max(0, K - S)
@@ -289,35 +303,64 @@ def calculate_black_scholes(S, K, T, r, sigma, option_type="Call"):
 
 @st.cache_data(ttl=900) 
 def fetch_chart_data(symbol, time_selection):
-    t = yf.Ticker(symbol) # No session needed here either
+    # Use the global session for chart history
+    t = yf.Ticker(symbol, session=yf_session)
     
-    if time_selection == "1 Day":
-        return t.history(period="1d", interval="5m")
-    # ... etc ...
+    intervals = {
+        "1 Day": "5m",
+        "5 Days": "30m",
+        "1 Month": "1d",
+        "6 Months": "1d",
+        "1 Year": "1d",
+        "5 Years": "1wk"
+    }
     
-    # yfinance requires different intervals for short timeframes to show actual candles
-    if time_selection == "1 Day":
-        return t.history(period="1d", interval="5m")
-    elif time_selection == "5 Days":
-        return t.history(period="5d", interval="30m")
-    elif time_selection == "1 Month":
-        return t.history(period="1mo", interval="1d")
-    elif time_selection == "6 Months":
-        return t.history(period="6mo", interval="1d")
-    elif time_selection == "1 Year":
-        return t.history(period="1y", interval="1d")
-    elif time_selection == "5 Years":
-        return t.history(period="5y", interval="1wk")
+    period_map = {
+        "1 Day": "1d",
+        "5 Days": "5d",
+        "1 Month": "1mo",
+        "6 Months": "6mo",
+        "1 Year": "1y",
+        "5 Years": "5y"
+    }
     
-    return t.history(period="1y", interval="1d")
+    return t.history(period=period_map.get(time_selection, "1y"), 
+                     interval=intervals.get(time_selection, "1d"))
 
-def get_session():
-    session = requests.Session()
-    # This makes the request look like it's coming from a standard Chrome browser
-    session.headers.update({
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-    })
-    return session
+@st.cache_resource(ttl=3600)
+def fetch_ticker_resource(symbol):
+    """
+    Fetches core ticker data, options expirations, and volatility metrics.
+    Caches the 'resource' (the Ticker object) to reduce API hits.
+    """
+    t = yf.Ticker(symbol, session=yf_session) 
+    
+    hist = t.history(period="1y")
+    if hist.empty: 
+        return None, None, None, 0.042, 0.0, 0.0, None, None
+    
+    # Calculate Momentum (m_t0) - 5 day return
+    m_t0 = (hist["Close"].iloc[-1] / hist["Close"].iloc[-6]) - 1 if len(hist) > 5 else 0
+    
+    # Calculate Realized Volatility for IV Rank
+    vols = hist["Close"].pct_change().rolling(21).std() * np.sqrt(252)
+    vols = vols.dropna()
+    
+    if not vols.empty:
+        current_vol = vols.iloc[-1]
+        vol_min, vol_max = vols.min(), vols.max()
+        vol_range = vol_max - vol_min
+        ivr = (current_vol - vol_min) / vol_range * 100 if vol_range > 0 else 50
+    else:
+        ivr = 50
+        
+    # Fetch Risk Free Rate (13-week T-Bill)
+    try:
+        rf_rate = yf.Ticker("^IRX", session=yf_session).history(period="1d")["Close"].iloc[-1] / 100
+    except:
+        rf_rate = 0.042 
+        
+    return t, t.options, hist["Close"].iloc[-1], rf_rate, m_t0, ivr, vols, hist
 
 # UPDATE THIS FUNCTION in Section 3
 @st.cache_resource(ttl=3600)
