@@ -4,9 +4,10 @@ import pandas as pd
 import numpy as np
 from scipy.stats import norm
 import plotly.graph_objects as go
-import requests
 
+# ==========================================
 # 1. FEAR Z BEHAVIORAL ENGINE
+# ==========================================
 class FearZEngine:
     def __init__(self):
         self.params = {
@@ -22,16 +23,13 @@ class FearZEngine:
 
     def automate_gamma(self, vol_history):
         """Calculates ticker-specific gamma based on IV mean reversion speed."""
-        # Safety check: if vol_history is empty or too short, return baseline 0.12
         if vol_history is None or len(vol_history) < 10:
             return 0.12
         
-        # Calculate daily change in IV (y) and distance from mean (x)
         mean_iv = vol_history.mean()
         y = np.diff(vol_history) 
         x = mean_iv - vol_history[:-1].values 
         
-        # Linear Regression: ΔIV = Gamma * (Mean - Current_IV)
         covariance = np.cov(x, y)[0, 1]
         variance = np.var(x)
         
@@ -39,14 +37,9 @@ class FearZEngine:
         return np.clip(ticker_gamma, 0.05, 0.25)
 
     def calculate_shelf(self, current_iv, iv_rank, vol_history):
-        # 1. Get dynamic gamma
         gamma = self.automate_gamma(vol_history)
-        
-        # 2. Threshold logic
         threshold = 0.30 if iv_rank < 70 else 0.45
         z_days = gamma * max(0, (current_iv * 100) - (threshold * 100))
-        
-        # 3. CRITICAL: Return BOTH values as a tuple so the sidebar can 'unpack' them
         return round(z_days, 1), round(gamma, 3)
 
     def get_projection(self, t_days, current_iv, m_t0, z, category):
@@ -54,16 +47,15 @@ class FearZEngine:
         if t_days <= z: return current_iv 
         
         t_delta = t_days - z
-        
-        # CORRECTED MATH: Inertia and Momentum act as friction on the decay rate (lambda)
-        # This stretches the "Emotional Tail" without causing artificial spikes.
         inertia_friction = 1 + (p['p0'] / 100) + (p['mu'] * abs(m_t0))
         adjusted_lam = p['lam'] / inertia_friction
         
         decay = current_iv * np.exp(-adjusted_lam * t_delta)
         return round(decay, 4)
 
-# 2. PAGE SETUP & CSS (UPDATED FOR MOBILE RESPONSIVENESS)
+# ==========================================
+# 2. PAGE SETUP & CSS
+# ==========================================
 st.set_page_config(page_title="MyQuant Analytics", layout="wide")
 
 st.markdown("""
@@ -116,7 +108,7 @@ st.markdown("""
         color: var(--text-color);
     }
 
-    /* --- BEHAVIORAL PIPELINE CLASSES (New for Mobile) --- */
+    /* --- BEHAVIORAL PIPELINE CLASSES --- */
     .pipeline-container {
         display: flex; 
         justify-content: space-between; 
@@ -129,6 +121,27 @@ st.markdown("""
         background: rgba(0,0,0,0.2); 
         border-radius: 6px;
     }
+
+    /* --- METRIC CARDS --- */
+    div[data-testid="stMetric"] {
+        background-color: rgba(191, 161, 93, 0.08);
+        padding: 15px;
+        border-radius: 10px;
+        border: 1px solid #bfa15d;
+        min-height: 134px; 
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+    }
+    div[data-testid="stMetric"] > div {
+        width: 100%;
+        text-align: left;
+    }
+    div[data-testid="stMetricLabel"] > div {
+        color: #bfa15d !important;
+        font-weight: bold;
+        justify-content: center;
+    } /* FIXED: Missing closing bracket added here */
 
     /* --- MOBILE MEDIA QUERIES --- */
     @media (max-width: 768px) {
@@ -148,47 +161,19 @@ st.markdown("""
         .logo-text-span { font-size: 1.8rem; }
         .main-title-text { font-size: 1.8rem; }
         .subtitle-text { font-size: 0.9rem; }
-        
         .pipeline-container {
             flex-direction: column;
         }
-    }
-
-    /* --- METRIC CARDS (UNTOUCHED) --- */
-    div[data-testid="stMetric"] {
-        background-color: rgba(191, 161, 93, 0.08);
-        padding: 15px;
-        border-radius: 10px;
-        border: 1px solid #bfa15d;
-        min-height: 134px; 
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-    }
-    
-    div[data-testid="stMetric"] > div {
-        width: 100%;
-        text-align: left;
-    }
-
-    div[data-testid="stMetricLabel"] > div {
-        color: #bfa15d !important;
-        font-weight: bold;
-        justify-content: center;
-            
-    @media (max-width: 768px) {
-    /* Force the metric columns to display as a 2-column grid on mobile */
-    [data-testid="column"] {
-        width: 50% !important;
-        flex: 1 1 50% !important;
-        min-width: 50% !important;
-    }
-}
+        [data-testid="column"] {
+            width: 50% !important;
+            flex: 1 1 50% !important;
+            min-width: 50% !important;
+        }
     }
     </style>
     """, unsafe_allow_html=True)
 
-# BRANDED HEADER RENDERING
+# BRANDED HEADER
 st.markdown("""
     <div class="branding-row">
         <div class="logo-col">
@@ -203,95 +188,59 @@ st.markdown("""
     </div>
     """, unsafe_allow_html=True)
 
-# --- NEW LEARN MORE EXPANDER ---
+# LEARN MORE EXPANDER
 with st.expander("Learn More: MyQuant Behavioral Engine & Regime Guide"):
     st.subheader("MyQuant's Behavioral Pipeline")
-
     st.markdown("""
     <div class="pipeline-container">
         <div class="pipeline-box" style="border-top: 3px solid #00ffcc;">
             <strong style="color: #00ffcc; font-size: 0.95rem;">1. The Input (IV Rank)</strong><br>
-            <p style="font-size: 0.85rem; opacity: 0.8; margin-top: 5px; margin-bottom: 0;">
-                The engine reads the stock's current Implied Volatility against its 1-year history to classify the true severity of the market panic.
-            </p>
+            <p style="font-size: 0.85rem; opacity: 0.8; margin-top: 5px; margin-bottom: 0;">The engine reads the stock's current Implied Volatility against its 1-year history to classify the true severity of the market panic.</p>
         </div>
         <div class="pipeline-box" style="border-top: 3px solid #ff4b4b;">
             <strong style="color: #ff4b4b; font-size: 0.95rem;">2. Behavioral Math</strong><br>
-            <p style="font-size: 0.85rem; opacity: 0.8; margin-top: 5px; margin-bottom: 0;">
-                Applies Emotional Inertia and Momentum Drag to calculate if option premiums are frozen in a "Panic Plateau" and determines the amount of days it will take for volatility decay.
-            </p>
+            <p style="font-size: 0.85rem; opacity: 0.8; margin-top: 5px; margin-bottom: 0;">Applies Emotional Inertia and Momentum Drag to calculate if option premiums are frozen in a "Panic Plateau" and determines the amount of days it will take for volatility decay.</p>
         </div>
         <div class="pipeline-box" style="border-top: 3px solid #FFC107;">
             <strong style="color: #FFC107; font-size: 0.95rem;">3. Smart Projection</strong><br>
-            <p style="font-size: 0.85rem; opacity: 0.8; margin-top: 5px; margin-bottom: 0;">
-                The model predicts the exact percentage that Volatility will crush over your specific holding period (The Suggested Shock) and applies it to the manual adjustments.
-            </p>
+            <p style="font-size: 0.85rem; opacity: 0.8; margin-top: 5px; margin-bottom: 0;">The model predicts the exact percentage that Volatility will crush over your specific holding period (The Suggested Shock) and applies it to the manual adjustments.</p>
         </div>
         <div class="pipeline-box" style="border-top: 3px solid #bfa15d;">
             <strong style="color: #bfa15d; font-size: 0.95rem;">4. Adjusted EV and Price Distribution</strong><br>
-            <p style="font-size: 0.85rem; opacity: 0.8; margin-top: 5px; margin-bottom: 0;">
-                Black-Scholes runs using the fear-adjusted IV, outputting a highly accurate Expected Value and price probability distribution via Monte Carlo Simulation calculating 10,000 possible scenarios.
-            </p>
+            <p style="font-size: 0.85rem; opacity: 0.8; margin-top: 5px; margin-bottom: 0;">Black-Scholes runs using the fear-adjusted IV, outputting a highly accurate Expected Value and price probability distribution via Monte Carlo Simulation calculating 10,000 possible scenarios.</p>
         </div>
     </div><br>""", unsafe_allow_html=True)
 
     st.subheader("Fear Z Regime Guide")
-
     guide_c1, guide_c2, guide_c3 = st.columns(3)
 
     with guide_c1:
         st.markdown("""
-    <div style="background-color: rgba(191, 161, 93, 0.05); padding: 15px; border-radius: 8px; border-left: 4px solid #4CAF50; height: 100%;">
-        <h4 style="margin-top:0; color: var(--text-color);">🟢 Episodic (IVR 0-69)</h4>
-        <p style="font-size: 0.9rem; opacity: 0.8; margin-bottom: 0;">
-            <strong>Contained</strong><br>
-            Standard market reaction to typical news. Fear is fleeting, the Panic Plateau is non-existent, and volatility decays rapidly back to its baseline.
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
-
+        <div style="background-color: rgba(191, 161, 93, 0.05); padding: 15px; border-radius: 8px; border-left: 4px solid #4CAF50; height: 100%;">
+            <h4 style="margin-top:0; color: var(--text-color);">🟢 Episodic (IVR 0-69)</h4>
+            <p style="font-size: 0.9rem; opacity: 0.8; margin-bottom: 0;"><strong>Contained</strong><br>Standard market reaction to typical news. Fear is fleeting, the Panic Plateau is non-existent, and volatility decays rapidly back to its baseline.</p>
+        </div>
+        """, unsafe_allow_html=True)
     with guide_c2:
         st.markdown("""
-    <div style="background-color: rgba(191, 161, 93, 0.05); padding: 15px; border-radius: 8px; border-left: 4px solid #FFC107; height: 100%;">
-        <h4 style="margin-top:0; color: var(--text-color);">🟡 Structural (IVR 70-89)</h4>
-        <p style="font-size: 0.9rem; opacity: 0.8; margin-bottom: 0;">
-            <strong>Regime Uncertainty</strong><br>
-            Investors are fundamentally questioning the stock's valuation. Triggers a moderate "Panic Plateau" where option premiums freeze before beginning a slow decay.
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
-
+        <div style="background-color: rgba(191, 161, 93, 0.05); padding: 15px; border-radius: 8px; border-left: 4px solid #FFC107; height: 100%;">
+            <h4 style="margin-top:0; color: var(--text-color);">🟡 Structural (IVR 70-89)</h4>
+            <p style="font-size: 0.9rem; opacity: 0.8; margin-bottom: 0;"><strong>Regime Uncertainty</strong><br>Investors are fundamentally questioning the stock's valuation. Triggers a moderate "Panic Plateau" where option premiums freeze before beginning a slow decay.</p>
+        </div>
+        """, unsafe_allow_html=True)
     with guide_c3:
         st.markdown("""
-    <div style="background-color: rgba(191, 161, 93, 0.05); padding: 15px; border-radius: 8px; border-left: 4px solid #ff4b4b; height: 100%;">
-        <h4 style="margin-top:0; color: var(--text-color);">🔴 Systemic (IVR 90+)</h4>
-        <p style="font-size: 0.9rem; opacity: 0.8; margin-bottom: 0;">
-            <strong>Crisis Detection</strong><br>
-            Peak market panic and capitulation. Creates a massive "Shelf" where implied volatility stays artificially inflated for days due to deep behavioral uncertainty.
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
-    st.divider()
-# 3. MATH & DATA FETCHING
-# ... (Resume script from here))
+        <div style="background-color: rgba(191, 161, 93, 0.05); padding: 15px; border-radius: 8px; border-left: 4px solid #ff4b4b; height: 100%;">
+            <h4 style="margin-top:0; color: var(--text-color);">🔴 Systemic (IVR 90+)</h4>
+            <p style="font-size: 0.9rem; opacity: 0.8; margin-bottom: 0;"><strong>Crisis Detection</strong><br>Peak market panic and capitulation. Creates a massive "Shelf" where implied volatility stays artificially inflated for days due to deep behavioral uncertainty.</p>
+        </div>
+        """, unsafe_allow_html=True)
 
 st.divider()
 
+# ==========================================
 # 3. MATH & DATA FETCHING
-
-# --- SECTION 3: MATH & DATA FETCHING ---
-
-def get_session():
-    """Creates a persistent session to bypass Yahoo Finance rate limits."""
-    session = requests.Session()
-    session.headers.update({
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-    })
-    return session
-
-# Initialize the global session
-yf_session = get_session()
-
+# ==========================================
 def calculate_black_scholes(S, K, T, r, sigma, option_type="Call"):
     if T <= 0 or sigma <= 0:
         return max(0, S - K) if option_type == "Call" else max(0, K - S)
@@ -303,87 +252,24 @@ def calculate_black_scholes(S, K, T, r, sigma, option_type="Call"):
 
 @st.cache_data(ttl=900) 
 def fetch_chart_data(symbol, time_selection):
-    # Use the global session for chart history
-    t = yf.Ticker(symbol, session=yf_session)
-    
-    intervals = {
-        "1 Day": "5m",
-        "5 Days": "30m",
-        "1 Month": "1d",
-        "6 Months": "1d",
-        "1 Year": "1d",
-        "5 Years": "1wk"
-    }
-    
-    period_map = {
-        "1 Day": "1d",
-        "5 Days": "5d",
-        "1 Month": "1mo",
-        "6 Months": "6mo",
-        "1 Year": "1y",
-        "5 Years": "5y"
-    }
-    
-    return t.history(period=period_map.get(time_selection, "1y"), 
-                     interval=intervals.get(time_selection, "1d"))
+    t = yf.Ticker(symbol)
+    intervals = {"1 Day": "5m", "5 Days": "30m", "1 Month": "1d", "6 Months": "1d", "1 Year": "1d", "5 Years": "1wk"}
+    period_map = {"1 Day": "1d", "5 Days": "5d", "1 Month": "1mo", "6 Months": "6mo", "1 Year": "1y", "5 Years": "5y"}
+    return t.history(period=period_map.get(time_selection, "1y"), interval=intervals.get(time_selection, "1d"))
 
 @st.cache_resource(ttl=3600)
 def fetch_ticker_resource(symbol):
-    """
-    Fetches core ticker data, options expirations, and volatility metrics.
-    Caches the 'resource' (the Ticker object) to reduce API hits.
-    """
-    t = yf.Ticker(symbol, session=yf_session) 
-    
-    hist = t.history(period="1y")
-    if hist.empty: 
-        return None, None, None, 0.042, 0.0, 0.0, None, None
-    
-    # Calculate Momentum (m_t0) - 5 day return
-    m_t0 = (hist["Close"].iloc[-1] / hist["Close"].iloc[-6]) - 1 if len(hist) > 5 else 0
-    
-    # Calculate Realized Volatility for IV Rank
-    vols = hist["Close"].pct_change().rolling(21).std() * np.sqrt(252)
-    vols = vols.dropna()
-    
-    if not vols.empty:
-        current_vol = vols.iloc[-1]
-        vol_min, vol_max = vols.min(), vols.max()
-        vol_range = vol_max - vol_min
-        ivr = (current_vol - vol_min) / vol_range * 100 if vol_range > 0 else 50
-    else:
-        ivr = 50
-        
-    # Fetch Risk Free Rate (13-week T-Bill)
-    try:
-        rf_rate = yf.Ticker("^IRX", session=yf_session).history(period="1d")["Close"].iloc[-1] / 100
-    except:
-        rf_rate = 0.042 
-        
-    return t, t.options, hist["Close"].iloc[-1], rf_rate, m_t0, ivr, vols, hist
-
-# UPDATE THIS FUNCTION in Section 3
-@st.cache_resource(ttl=3600)
-def fetch_ticker_resource(symbol):
-    # REMOVE the session lines. yfinance 1.2.0 handles this internally now.
+    """Fetches core ticker data, options expirations, and volatility metrics."""
     t = yf.Ticker(symbol) 
-    
     hist = t.history(period="1y")
-    if hist.empty: return None, None, None, 0.042, 0.0, 0.0, None, None
     
-    # ... the rest of your logic remains the same ...
-    
-    # ... rest of your code ...
-    
-    hist = t.history(period="1y")
-    if hist.empty: return None, None, None, 0.042, 0.0, 0.0, None, None
-    hist = t.history(period="1y")
-    if hist.empty: return None, None, None, 0.042, 0.0, 0.0
+    if hist.empty: 
+        return None, None, None, 0.042, 0.0, 50.0, None, None
     
     m_t0 = (hist["Close"].iloc[-1] / hist["Close"].iloc[-6]) - 1 if len(hist) > 5 else 0
     vols = hist["Close"].pct_change().rolling(21).std() * np.sqrt(252)
     vols = vols.dropna()
-    # DEBUGGED: Added ZeroDivisionError safety net
+    
     if not vols.empty:
         current_vol = vols.iloc[-1]
         vol_range = vols.max() - vols.min()
@@ -398,7 +284,10 @@ def fetch_ticker_resource(symbol):
         
     return t, t.options, hist["Close"].iloc[-1], rf_rate, m_t0, ivr, vols, hist
 
+
+# ==========================================
 # 4. SIDEBAR INPUTS
+# ==========================================
 with st.sidebar:
     st.header("Trade Parameters")
     ticker_input = st.text_input("Ticker Symbol", value="SPY").upper().strip()
@@ -406,7 +295,6 @@ with st.sidebar:
         st.info("Enter a ticker symbol (e.g., AAPL, NVDA, SPY) to begin analysis.")
         st.stop()
     
-    # 1. NEW UNPACKING (Added vol_history)
     ticker_obj, expirations, spot_price, risk_free_rate, m_t0, auto_ivr, vol_history, hist_data = fetch_ticker_resource(ticker_input)
     
     if ticker_obj is None or not expirations:
@@ -427,20 +315,15 @@ with st.sidebar:
 
     st.divider()
     st.markdown("### Behavioral Adjustment")
-    
     st.markdown(f"Live Market IV Rank: <span style='color:#bfa15d; font-weight:bold; font-size:1.1rem;'>{int(auto_ivr)}</span>", unsafe_allow_html=True)
     
     ivr = st.slider("Stress Test Override", 0, 100, int(auto_ivr))
     
-    # 2. NEW DYNAMIC ENGINE LOGIC
     fz = FearZEngine()
     regime = fz.classify_shock(ivr)
     iv = option_row["impliedVolatility"] if option_row["impliedVolatility"] > 0 else 0.001
     
-    # Passing vol_history here allows the engine to calculate a ticker-specific gamma
     shelf, dynamic_gamma = fz.calculate_shelf(iv, ivr, vol_history) 
-    
-    # Updated UI to show the "Story" of the dynamic gamma
     st.info(f"Regime: **{regime}**\n\nTicker Gamma: **{dynamic_gamma}**\n\nShelf Duration: **{shelf} Days**")
 
     st.divider()
@@ -449,7 +332,10 @@ with st.sidebar:
     order_size = st.number_input("Contracts", value=1, min_value=1)
     stop_loss_pct = st.slider("Stop Loss (%)", 0, 100, 20) / 100
 
+
+# ==========================================
 # 5. PRE-CALCULATIONS & SHOCKS
+# ==========================================
 premium = option_row["ask"] if option_row["ask"] > 0 else option_row["lastPrice"]
 days_to_exp = (pd.to_datetime(selected_exp) - pd.to_datetime("today")).days
 time_to_exp = max(days_to_exp, 1) / 365
@@ -475,10 +361,7 @@ if adj_periodic_iv <= 0: adj_periodic_iv = 0.0001
 
 bs_fair_value = calculate_black_scholes(spot_price, strike_price, time_to_exp, risk_free_rate, iv, trade_type)
 
-# Risk-Neutral Drift 
 drift = (risk_free_rate - 0.5 * adj_iv**2) * adj_time
-
-# Apply the drift to the Z-Score calculations
 t_z = (np.log(target_price / spot_price) - drift) / adj_periodic_iv
 s_z = (np.log(strike_price / spot_price) - drift) / adj_periodic_iv
 b_z = (np.log(breakeven / spot_price) - drift) / adj_periodic_iv
@@ -495,10 +378,8 @@ total_pnl = pnl_per_contract * order_size
 max_risk = premium * order_size * 100
 risk_factor = 1.0 if stop_loss_pct == 0.0 else stop_loss_pct
 
-# EV
 ev = (t_prob * total_pnl) - (((1 - b_prob) * max_risk) * risk_factor)
 
-# Projected Exit Premium 
 days_remaining_at_exit = max(0, days_to_exp - days_to_hold)
 time_remaining_at_exit = days_remaining_at_exit / 365
 
@@ -513,17 +394,19 @@ projected_premium = calculate_black_scholes(
 
 projected_roi = ((projected_premium - premium) / premium) * 100 if premium > 0 else 0
 
-# 6. DASHBOARD METRICS (STACKED 4x4)
+
+# ==========================================
+# 6. DASHBOARD METRICS
+# ==========================================
 valuation_label = "Overvalued" if premium > bs_fair_value else "Undervalued"
 pct_diff = ((premium - bs_fair_value) / bs_fair_value * 100) if bs_fair_value > 0 else 0
 
-# Row 1
 r1 = st.columns(4)
 r1[0].metric("Spot Price", f"${spot_price:.2f}")
 r1[1].metric("Market Premium", f"${premium:.2f}")
 r1[2].metric("Black-Scholes", f"${bs_fair_value:.2f}", delta=f"{pct_diff:.1f}% {valuation_label}", delta_color="inverse")
 r1[3].metric("Exit Premium", f"${projected_premium:.2f}", delta=f"{projected_roi:.1f}% ROI")
-# Row 2
+
 r2 = st.columns(4)
 r2[0].metric(f"IV: {ticker_input}", f"{iv*100:.1f}%")
 r2[1].metric("Fear Z Shelf", f"{shelf}d", delta=regime, delta_color="off")
@@ -532,7 +415,9 @@ r2[3].metric("Breakeven", f"${breakeven:.2f}")
 
 st.divider()
 
+# ==========================================
 # 6.5 LIVE MARKET CHART 
+# ==========================================
 chart_col1, chart_col2 = st.columns([4, 1])
 with chart_col1:
     st.subheader(f"Live Market Action: {ticker_input}")
@@ -552,17 +437,14 @@ fig_candle = go.Figure(data=[go.Candlestick(
     high=chart_data['High'],
     low=chart_data['Low'],
     close=chart_data['Close'],
-    
     increasing_line_color='#00ffcc', 
     decreasing_line_color='#ff4b4b', 
-    
     hovertemplate="""
     <span style='color:#bfa15d'><b>Date:</b></span> %{x}<br>
     <span style='color:#bfa15d'><b>Open:</b></span> $%{open:.2f}<br>
     <span style='color:#bfa15d'><b>Close:</b></span> $%{close:.2f}<br>
     <span style='color:#bfa15d'><b>Range:</b></span> $%{low:.2f} - $%{high:.2f}
     <extra></extra>""",
-    
     name="Price"
 )])
 
@@ -576,98 +458,60 @@ fig_candle.add_trace(go.Scatter(
 ))
 
 if timeframe in ["1 Day", "5 Days"]:
-    x_breaks = [
-        dict(bounds=["sat", "mon"]), 
-        dict(bounds=[16, 9.5], pattern="hour") 
-    ]
+    x_breaks = [dict(bounds=["sat", "mon"]), dict(bounds=[16, 9.5], pattern="hour")]
 else:
-    x_breaks = [
-        dict(bounds=["sat", "mon"])
-    ]
+    x_breaks = [dict(bounds=["sat", "mon"])]
 
 fig_candle.add_hline(
-    y=spot_price, 
-    line_dash="dot", 
-    line_color="#bfa15d", 
+    y=spot_price, line_dash="dot", line_color="#bfa15d", 
     annotation_text=f"  Current: ${spot_price:.2f}", 
     annotation_position="bottom right"
 )
 
 fig_candle.add_trace(go.Scatter(
-    x=[chart_data.index[-1]], 
-    y=[spot_price],
-    mode="markers",
+    x=[chart_data.index[-1]], y=[spot_price], mode="markers",
     marker=dict(color="#bfa15d", size=10, symbol="diamond"),
-    name=f"Current: ${spot_price:.2f}",
-    hoverinfo="skip"
+    name=f"Current: ${spot_price:.2f}", hoverinfo="skip"
 ))
 
-fig_candle.add_hline(
-    y=spot_price, 
-    line_dash="dot", 
-    line_color="#bfa15d", 
-    opacity=0.8
-)
-
 fig_candle.add_trace(go.Scatter(
-    x=[chart_data.index[0], chart_data.index[-1]], 
-    y=[target_price, target_price],
-    mode="lines",
-    line=dict(color="#00ffcc", width=2, dash="dash"),
+    x=[chart_data.index[0], chart_data.index[-1]], y=[target_price, target_price],
+    mode="lines", line=dict(color="#00ffcc", width=2, dash="dash"),
     name=f"Target: ${target_price:.2f}"
 ))
 
 fig_candle.add_trace(go.Scatter(
-    x=[chart_data.index[0], chart_data.index[-1]], 
-    y=[breakeven, breakeven],
-    mode="lines",
-    line=dict(color="#ff4b4b", width=2, dash="solid"),
+    x=[chart_data.index[0], chart_data.index[-1]], y=[breakeven, breakeven],
+    mode="lines", line=dict(color="#ff4b4b", width=2, dash="solid"),
     name=f"Breakeven: ${breakeven:.2f}"
 ))
 
 fig_candle.update_layout(
-    paper_bgcolor='rgba(0,0,0,0)', 
-    plot_bgcolor='rgba(0,0,0,0)',
-    xaxis_rangeslider_visible=False,
-    margin=dict(l=0, r=0, t=10, b=0),
-    hovermode="x unified",
+    paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+    xaxis_rangeslider_visible=False, margin=dict(l=0, r=0, t=10, b=0), hovermode="x unified",
     yaxis=dict(title="Price ($)", gridcolor="rgba(255,255,255,0.1)"),
-    xaxis=dict(
-        gridcolor="rgba(255,255,255,0.1)",
-        rangebreaks=x_breaks 
-    ),
-    legend=dict(
-        orientation="h",
-        yanchor="bottom",
-        y=1.02,
-        xanchor="right",
-        x=1,
-        bgcolor="rgba(0,0,0,0)"
-    )
+    xaxis=dict(gridcolor="rgba(255,255,255,0.1)", rangebreaks=x_breaks),
+    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, bgcolor="rgba(0,0,0,0)")
 )
 
 st.plotly_chart(fig_candle, use_container_width=True, config={'scrollZoom': False, 'displayModeBar': False})
 st.divider()
 
+# ==========================================
 # 7. INTERACTIVE LAYOUT
+# ==========================================
 col_left, col_right = st.columns([2, 3])
 
 with col_left:
-    with col_left:
-        st.subheader("Probability Summary")
-        prob_data = {
-            "Level": ["Target Price", "Strike Price", "Breakeven"],
-            "Price": [f"${target_price:.2f}", f"${strike_price:.2f}", f"${breakeven:.2f}"],
-            "Probability to Reach": [f"{t_prob:.2%}", f"{s_prob:.2%}", f"{b_prob:.2%}"]
-        }
+    st.subheader("Probability Summary")
+    prob_data = {
+        "Level": ["Target Price", "Strike Price", "Breakeven"],
+        "Price": [f"${target_price:.2f}", f"${strike_price:.2f}", f"${breakeven:.2f}"],
+        "Probability to Reach": [f"{t_prob:.2%}", f"{s_prob:.2%}", f"{b_prob:.2%}"]
+    }
     
-    # Change this:
-    # st.table(pd.DataFrame(prob_data))
-    
-    # To this:
     st.dataframe(pd.DataFrame(prob_data), hide_index=True, use_container_width=True)
     
-    # ... rest of the code remains the same
     st.subheader("Trade Analysis")
     actual_risk_per_cnt = premium * risk_factor
     potential_profit = max(0, target_price - breakeven) if trade_type == "Call" else max(0, breakeven - target_price)
@@ -696,19 +540,11 @@ with col_right:
     fig = go.Figure()
     
     fig.add_vrect(
-        x0=p5, x1=p95,
-        fillcolor="#bfa15d",
-        opacity=0.15,
-        layer="below",
-        line_width=0,
+        x0=p5, x1=p95, fillcolor="#bfa15d", opacity=0.15, layer="below", line_width=0,
     )
     
     fig.add_trace(go.Histogram(
-        x=sim_prices, 
-        nbinsx=150,             
-        name="Frequency",
-        marker_color='#bfa15d', 
-        opacity=0.8,
+        x=sim_prices, nbinsx=150, name="Frequency", marker_color='#bfa15d', opacity=0.8,
         hovertemplate="<b>Price:</b> %{x:$.2f}<br><b>Frequency:</b> %{y}<extra></extra>"
     ))
     
@@ -722,26 +558,10 @@ with col_right:
     fig.add_trace(go.Scatter(x=[None], y=[None], mode='markers', marker=dict(color='rgba(191, 161, 93, 0.4)', symbol='square', size=15), name='90% Confidence Interval'))
     
     fig.update_layout(
-        title=f"Price Distribution in {days_to_hold} Days",
-        xaxis=dict(title="Price ($)"),
-        yaxis=dict(title="Frequency"),
-        paper_bgcolor='rgba(0,0,0,0)', 
-        plot_bgcolor='rgba(0,0,0,0)', 
-        hovermode="x unified",
-        showlegend=True,
-        bargap=0.25,
-        hoverlabel=dict(
-            font_size=16,          
-            font_family="serif",   
-        ),            
-        legend=dict(
-            orientation="h",
-            yanchor="bottom",
-            y=1.02,
-            xanchor="right",
-            x=1,
-            bgcolor="rgba(0,0,0,0)"
-        )
+        title=f"Price Distribution in {days_to_hold} Days", xaxis=dict(title="Price ($)"), yaxis=dict(title="Frequency"),
+        paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', hovermode="x unified",
+        showlegend=True, bargap=0.25, hoverlabel=dict(font_size=16, font_family="serif"),            
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, bgcolor="rgba(0,0,0,0)")
     )
     
     st.plotly_chart(fig, use_container_width=True, config={'scrollZoom': False, 'displayModeBar': False})
@@ -760,8 +580,6 @@ with col_right:
         </div>
     """, unsafe_allow_html=True)
 
-
-# 8. REGIME CLASSIFICATION LEGEND (UPDATED FOR MOBILE RESPONSIVENESS)
 st.divider()
 
-    # python -m streamlit run MyQuant_V1.py
+#streamlit run MyQuant/MyQuant_V1.py
