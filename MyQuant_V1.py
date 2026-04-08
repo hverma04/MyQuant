@@ -141,7 +141,7 @@ st.markdown("""
         color: #bfa15d !important;
         font-weight: bold;
         justify-content: center;
-    } /* FIXED: Missing closing bracket added here */
+    }
 
     /* --- MOBILE MEDIA QUERIES --- */
     @media (max-width: 768px) {
@@ -259,7 +259,6 @@ def fetch_chart_data(symbol, time_selection):
 
 @st.cache_resource(ttl=3600)
 def fetch_ticker_resource(symbol):
-    """Fetches core ticker data, options expirations, and volatility metrics."""
     t = yf.Ticker(symbol) 
     hist = t.history(period="1y")
     
