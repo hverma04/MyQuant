@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KERN Financial | Business Development</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #0a0e14; color: #e5e7eb; }
+        .serif { font-family: 'Playfair+Display', serif; }
+        .accent-gold { color: #c5a059; } /* Matching your logo dot */
+        .bg-navy { background-color: #0f172a; }
+        .border-gold { border-color: #c5a059; }
+        .bento-card { background: rgba(30, 41, 59, 0.5); border: 1px solid rgba(197, 160, 89, 0.1); transition: all 0.3s ease; }
+        .bento-card:hover { border-color: #c5a059; transform: translateY(-5px); }
+    </style>
+</head>
+<body>
+
+    <nav class="flex justify-between items-center p-8 max-w-7xl mx-auto">
+        <a href="#" class="flex items-center">
+            <img src="KernLogoCircle.png" alt="KERN Financial Logo" class="h-12 w-auto object-contain">
+        </a>
+        
+        <div class="hidden md:flex space-x-8 text-sm uppercase tracking-widest opacity-80 items-center">
+            <a href="#services" class="hover:text-[#c5a059]">Services</a>
+            <a href="#labs" class="hover:text-[#c5a059]">Labs</a>
+            <a href="#contact" class="px-4 py-2 border border-gold accent-gold hover:bg-[#c5a059] hover:text-navy transition">Contact Us</a>
+        </div>
+    </nav>
+
+    <header class="relative py-32 px-8 text-center flex flex-col justify-center items-center overflow-hidden min-h-[80vh]">
+        
+        <div class="absolute inset-0 z-0">
+    <img src="MillCityBackground.webp" alt="Modern Business Environment" class="w-full h-full object-cover opacity-60 grayscale">
+    
+    <div class="absolute inset-0 bg-gradient-to-b from-[#0a0e14]/60 via-[#0a0e14]/40 to-[#0a0e14]"></div>
+</div>
+        <div class="relative z-10 max-w-7xl mx-auto">
+            <h1 class="text-5xl md:text-7xl serif mb-6">Institutional Intelligence.<br><span class="accent-gold">Small Business Scale.</span></h1>
+            <p class="max-w-2xl mx-auto text-lg opacity-80 mb-10 font-light">We bridge the gap between quantitative finance and operational reality. From financial restructuring to high-level modeling, we provide the architecture for your growth.</p>
+            <div class="flex flex-col md:flex-row justify-center gap-4">
+                <a href="#contact" class="bg-[#c5a059] text-[#0f172a] font-bold px-8 py-4 rounded shadow-lg hover:brightness-110 transition-all">Request Infrastructure Audit</a>
+                <a href="#labs" class="border border-white/20 px-8 py-4 rounded hover:bg-white/10 backdrop-blur-sm transition-all">Explore MyQuant Lab</a>
+            </div>
+        </div>
+    </header>
+
+    <section id="services" class="py-20 px-8 max-w-7xl mx-auto">
+        <h2 class="text-3xl serif mb-12">Core Capabilities</h2>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            
+            <div class="md:col-span-2 bento-card p-10 rounded-2xl relative overflow-hidden">
+                <i data-lucide="bar-chart-3" class="accent-gold mb-4 w-10 h-10"></i>
+                <h3 class="text-2xl serif mb-4">Financial Restructuring & Modeling</h3>
+                <p class="opacity-70">Move beyond basic bookkeeping. We build advanced Excel engines and statistical models that forecast cash flow and stress test margins to push your business into high levels of growth.</p>
+            </div>
+
+            <div class="bento-card p-10 rounded-2xl">
+                <i data-lucide="target" class="accent-gold mb-4 w-10 h-10"></i>
+                <h3 class="text-xl serif mb-4">Strategy & Marketing</h3>
+                <p class="opacity-70 text-sm">KERN Assists the development of business strategy through data-driven insight and AI integration directing businesses into the 21st century. Furthermore, KERN has an unparalleled marketing team that is dedicated to improving business identity and presence.</p>
+            </div>
+
+            <div class="bento-card p-10 rounded-2xl">
+                <i data-lucide="network" class="accent-gold mb-4 w-10 h-10"></i>
+                <h3 class="text-xl serif mb-4">Resource Connection</h3>
+                <p class="opacity-70 text-sm">As business development partners we specialize in outsourcing necessary connections and building cross functional relationships. Not only does this help businesses but focuses on our ideology of building a tight knitted community.</p>
+            </div>
+
+            <div id="labs" class="md:col-span-2 bento-card p-10 rounded-2xl border-l-4 border-l-[#c5a059] bg-gradient-to-r from-[#0f172a] to-[#1e293b]">
+    <div class="flex justify-between items-start">
+        <div>
+            <span class="text-[10px] uppercase tracking-widest bg-gold/20 accent-gold px-2 py-1 border border-gold/30 mb-4 inline-block">R&D Lab</span>
+            <h3 class="text-2xl serif mb-2">MyQuant <span class="text-sm opacity-50 italic">(In Development)</span></h3>
+            <p class="opacity-70 mb-6">Our Quantitative Investment Strategy is like no other. Built for the average investor; it applies hedge fund strategy to the retail markets allowing for quantitiative insight on every trade you make.</p>
+            
+            <a href="https://myquantkern.streamlit.app/" target="_blank" class="inline-flex items-center gap-2 px-5 py-2 text-sm font-semibold border border-[#c5a059] text-[#c5a059] rounded hover:bg-[#c5a059] hover:text-[#0f172a] transition-colors duration-300">
+                Try the Prototype
+                <i data-lucide="arrow-right" class="w-4 h-4"></i>
+            </a>
+        </div>
+        <i data-lucide="binary" class="accent-gold opacity-20 w-20 h-20"></i>
+    </div>
+</div>
+        </div>
+    </section>
+
+    <footer id="contact" class="py-20 px-8 border-t border-white/10 mt-20">
+        <div class="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center">
+            <div class="mb-8 md:mb-0">
+                <h2 class="text-3xl serif mb-2">Ready to modernize?</h2>
+                <p class="opacity-60">Let's institutionalize your financial infrastructure.</p>
+            </div>
+            <a href="mailto:hello@kernfinancial.com" class="text-2xl font-bold border-b-2 border-gold pb-2 hover:opacity-70 transition">kernfinancialpartners@gmail.com</a>
+        </div>
+    </footer>
+
+    <script>
+        lucide.createIcons();
+    </script>
+</body>
+</html>
