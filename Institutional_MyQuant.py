@@ -818,14 +818,24 @@ def _get_anthropic_client():
         return None
     return anthropic.Anthropic(api_key=api_key)
 
-def _stream_ai_response(prompt, max_tokens=400, placeholder=None):
+_ADVISOR_SYSTEM = (
+    "You are a friendly, experienced investment advisor speaking to someone who is investing their own money privately for the first time. "
+    "Always reply in a notes style — short bullet points or numbered items, never long paragraphs. "
+    "Briefly define any financial term you use in plain English (e.g. 'Sharpe Ratio — measures how much return you get per unit of risk'). "
+    "Be warm, direct, and practical. If something carries real risk, say so plainly. Keep every bullet to 1-2 lines."
+)
+
+def _stream_ai_response(prompt, max_tokens=400, placeholder=None, system=None):
     client = _get_anthropic_client()
     if not client:
         return "Add `ANTHROPIC_API_KEY` to `.streamlit/secrets.toml` to enable AI features."
     full_text = ""
     try:
-        with client.messages.stream(model="claude-sonnet-4-6", max_tokens=max_tokens,
-                                    messages=[{"role": "user", "content": prompt}]) as stream:
+        stream_kwargs = dict(model="claude-sonnet-4-6", max_tokens=max_tokens,
+                             messages=[{"role": "user", "content": prompt}])
+        if system:
+            stream_kwargs["system"] = system
+        with client.messages.stream(**stream_kwargs) as stream:
             for text_chunk in stream.text_stream:
                 full_text += text_chunk
                 if placeholder:
@@ -841,28 +851,49 @@ def _stream_ai_response(prompt, max_tokens=400, placeholder=None):
 def generate_briefing(market_data, watchlist_data, placeholder=None):
     market_str    = "\n".join([f"- {r['Name']} ({r['Symbol']}): ${r['Price']:.2f} ({r['Change']:+.2f}%)" for r in market_data])
     watchlist_str = "\n".join([f"- {r['Symbol']}: IVR {r['IVR']} ({r['Regime']} regime), ${r['Price']:.2f}" for r in watchlist_data if r]) or "No watchlist data."
-    prompt = f"""You are a quantitative analyst writing a morning market briefing for an institutional investor.
+    prompt = f"""Morning briefing for {date.today().strftime('%B %d, %Y')}.
 
-Today: {date.today().strftime('%B %d, %Y')}
-Market: {market_str}
-Watchlist Fear Z: {watchlist_str}
+Market snapshot:
+{market_str}
 
-Write a sharp briefing in 3 short paragraphs: market tone, behavioral regimes to watch (Episodic/Structural/Systemic), and today's trading posture. Under 200 words. Direct and data-driven."""
-    return _stream_ai_response(prompt, max_tokens=400, placeholder=placeholder)
+Watchlist readings:
+{watchlist_str}
+
+Give a quick morning brief using exactly these 3 bullet sections:
+• 📊 What the market is doing today — plain summary of the numbers above
+• 🧠 What to keep an eye on — explain any Fear Z regime (Episodic = short vol spike, Structural = sustained pressure, Systemic = market-wide fear) and why it matters today
+• 🎯 How to approach today — one practical suggestion for a first-time investor
+
+Keep each section to 2-3 lines. No jargon without a brief explanation."""
+    return _stream_ai_response(prompt, max_tokens=400, placeholder=placeholder, system=_ADVISOR_SYSTEM)
 
 def generate_trade_reasoning(symbol, trade_type, strike, expiry, premium, bs_fair, ev, regime, shelf, verdict, score, placeholder=None):
-    prompt = f"""Quantitative options analyst. Trade details:
-{symbol} {trade_type} ${strike:.2f} exp {expiry} | Premium ${premium:.2f} | BS Fair ${bs_fair:.2f}
-EV ${ev:.2f} | Regime {regime} ({shelf}d shelf) | Verdict {verdict} ({score:.1f}/3.0)
-Write 2-3 sentences: why {verdict}, biggest risk, one specific level to watch. Direct and numeric."""
-    return _stream_ai_response(prompt, max_tokens=200, placeholder=placeholder)
+    prompt = f"""Options trade details:
+- {symbol} {trade_type} | Strike ${strike:.2f} | Expires {expiry}
+- Premium paid/received: ${premium:.2f} | Fair value estimate: ${bs_fair:.2f}
+- Expected value: ${ev:.2f} | Market regime: {regime} ({shelf}-day window) | Score: {score:.1f}/3.0 → {verdict}
+
+Explain this trade in 3 short bullets:
+• Why the verdict is "{verdict}" — what the numbers are saying in plain English
+• The biggest risk to this trade — what could go wrong
+• One specific price level or date to watch
+
+Briefly explain any options term you use (e.g. strike, premium, expiry)."""
+    return _stream_ai_response(prompt, max_tokens=250, placeholder=placeholder, system=_ADVISOR_SYSTEM)
 
 def generate_stock_reasoning(symbol, spot, momentum_5d, ivr, regime, verdict, score, target_pct, holding_days, placeholder=None):
-    prompt = f"""Quantitative equity analyst. Stock details:
-{symbol} @ ${spot:.2f} | 5d Momentum {momentum_5d*100:+.1f}% | IV Rank {ivr:.0f} | Regime {regime}
-Target +{target_pct:.1f}% over {holding_days}d | Stock Advisor Verdict {verdict} ({score:.1f}/3.0)
-Write 2-3 sentences: why {verdict}, primary risk, one specific catalyst or level to watch. Direct and numeric."""
-    return _stream_ai_response(prompt, max_tokens=200, placeholder=placeholder)
+    prompt = f"""Stock snapshot:
+- {symbol} current price: ${spot:.2f}
+- 5-day price momentum: {momentum_5d*100:+.1f}% (positive = trending up recently)
+- IV Rank: {ivr:.0f}/100 (measures how 'expensive' options are right now — above 50 = elevated fear)
+- Market regime: {regime} | Target: +{target_pct:.1f}% gain over {holding_days} days
+- Score: {score:.1f}/3.0 → Verdict: {verdict}
+
+Explain in 3 short bullets:
+• Why the verdict is "{verdict}" — what the data is telling us
+• The main risk — what could prevent this from working
+• One catalyst or price level to keep an eye on"""
+    return _stream_ai_response(prompt, max_tokens=250, placeholder=placeholder, system=_ADVISOR_SYSTEM)
 
 def generate_fundamental_reasoning(symbol, scored, tech_verdict, tech_score, placeholder=None):
     raw = scored.get("raw", {})
@@ -881,39 +912,51 @@ def generate_fundamental_reasoning(symbol, scored, tech_verdict, tech_score, pla
         f"OpM {_fmt(raw.get('Operating Margin'), pct=True)} | EPS {_fmt(raw.get('EPS Growth'), pct=True)}\n"
         f"Fundamental Score: {scored['total_score']:.1f}/10 | Technical: {tech_verdict} ({tech_score:.1f}/3.0)"
     )
-    prompt = f"""Quantitative fundamental analyst reviewing {symbol}.
-
+    prompt = f"""Company financial data for {symbol}:
 {summary}
 
-Write 3-4 sentences: (1) overall fundamental quality verdict, (2) the single biggest risk or weakness, (3) how fundamentals align with or contradict the technical signal. Be direct and use the numbers. No headers, no bullets."""
-    return _stream_ai_response(prompt, max_tokens=300, placeholder=placeholder)
+Explain this company's financial health in 4 short bullets:
+• 💰 Overall quality — is this a financially healthy company? Give a plain verdict
+• ⚠️ Biggest concern — the single weakest number and what it means in everyday terms
+• 📈 Growth picture — is the business growing, and is that growth healthy?
+• 🔗 Does it match the chart? — do the fundamentals support or contradict the technical signal?
+
+When you mention any ratio (Current Ratio, D/E, ROE, etc.), add a one-phrase explanation in brackets."""
+    return _stream_ai_response(prompt, max_tokens=350, placeholder=placeholder, system=_ADVISOR_SYSTEM)
 
 def generate_news_summary(symbol, headlines, placeholder=None):
     headlines_str = "\n".join(f"- {h}" for h in headlines if h)
-    prompt = f"""Summarize the following recent news headlines for {symbol} in 2-3 sentences. Cover: overall sentiment, any material events (earnings, product, regulatory, macro), and what this means for the near-term outlook. Be direct and specific.
+    prompt = f"""Recent news headlines for {symbol}:
+{headlines_str}
 
-{headlines_str}"""
-    return _stream_ai_response(prompt, max_tokens=200, placeholder=placeholder)
+Summarise in 3 short bullets:
+• 🗞️ Overall mood — is the news positive, negative, or mixed?
+• 📌 Key event — the single most important story and why it matters for the stock
+• 👀 Near-term outlook — what should an investor watch for in the coming days?
+
+Plain English only — no financial jargon without a brief explanation."""
+    return _stream_ai_response(prompt, max_tokens=220, placeholder=placeholder, system=_ADVISOR_SYSTEM)
 
 def generate_etf_analysis(portfolio, sharpe, sortino, beta, alpha_annual, max_dd, var_95, total_invested, total_fv, horizon, placeholder=None):
     holdings_str = "\n".join(f"- {t}: ${d:,.0f} ({d/total_invested*100:.1f}%)" for t, d in portfolio.items())
-    prompt = f"""You are an institutional portfolio analyst reviewing a custom ETF portfolio.
-
-Holdings:
+    prompt = f"""Portfolio holdings:
 {holdings_str}
 
-Risk Metrics:
-- Sharpe Ratio: {sharpe:.3f}
-- Sortino Ratio: {sortino:.3f}
-- Beta vs SPY: {beta:.3f}
-- Annualized Alpha: {alpha_annual:.2f}%
-- Max Drawdown: {max_dd:.2f}%
-- 95% 1-Day VaR: ${abs(var_95):,.0f}
-- Total Invested: ${total_invested:,.0f}
-- {horizon}Y Projected Value: ${total_fv:,.0f}
+Risk numbers:
+- Sharpe Ratio: {sharpe:.3f} (reward per unit of risk — above 1.0 is solid)
+- Sortino Ratio: {sortino:.3f} (like Sharpe but only penalises downside risk)
+- Beta vs S&P 500: {beta:.3f} (1.0 = moves with the market; above 1 = more volatile)
+- Annualised Alpha: {alpha_annual:.2f}% (extra return beyond what the market gave you)
+- Max Drawdown: {max_dd:.2f}% (worst peak-to-trough loss in the period)
+- Daily VaR 95%: ${abs(var_95):,.0f} (on a bad day, you could lose up to this amount)
+- Money invested: ${total_invested:,.0f} → projected in {horizon} years: ${total_fv:,.0f}
 
-Write 3-4 sentences: (1) overall portfolio quality and risk-return profile, (2) concentration or diversification concerns, (3) whether the risk metrics justify the allocation, (4) one specific actionable recommendation. Be direct, institutional, and specific."""
-    return _stream_ai_response(prompt, max_tokens=350, placeholder=placeholder)
+Explain this portfolio in 4 short bullets:
+• 📊 Overall picture — is this a good portfolio for someone starting out?
+• ⚖️ Diversification — is the money spread well or too concentrated in a few stocks?
+• 🔢 Do the risk numbers stack up? — interpret the key metrics in plain language
+• 💡 One thing to consider doing — a practical, specific suggestion"""
+    return _stream_ai_response(prompt, max_tokens=400, placeholder=placeholder, system=_ADVISOR_SYSTEM)
 
 
 # ==========================================
@@ -1002,8 +1045,8 @@ div[data-testid="stMetricValue"] { font-size:1.35rem; font-weight:700; }
 .vd-hold { border-color:#FFC107; background:rgba(255,193,7,0.07);  }
 .vd-sell { border-color:#ff4b4b; background:rgba(255,75,75,0.07);  }
 
-/* ── TOP NAV buttons ── */
-div[data-testid="stHorizontalBlock"] div[data-testid="stButton"] button { padding-top:4px !important; padding-bottom:4px !important; font-size:0.73rem !important; letter-spacing:0.02em !important; }
+/* ── TOP NAV ── */
+div[data-testid="stHorizontalBlock"] div[data-testid="stButton"] button { padding:4px 6px !important; font-size:0.63rem !important; letter-spacing:0.07em !important; text-transform:uppercase !important; font-weight:600 !important; min-height:26px !important; line-height:1.1 !important; white-space:nowrap !important; }
 
 /* ── PAGE SECTION HEADER ── */
 .page-section-header { display:flex; align-items:center; gap:12px; margin:4px 0 18px 0; }
@@ -1095,9 +1138,10 @@ if "nav_page" not in st.session_state:
 def _nav_btn(col, pg_name):
     if st.session_state.nav_page == pg_name:
         col.markdown(
-            f'<div style="text-align:center;padding:5px 2px 4px;'
+            f'<div style="text-align:center;padding:4px 2px 3px;'
             f'border-bottom:2px solid #bfa15d;color:#bfa15d;'
-            f'font-size:0.73rem;font-weight:700;white-space:nowrap;">{pg_name}</div>',
+            f'font-size:0.63rem;font-weight:700;letter-spacing:0.07em;'
+            f'text-transform:uppercase;white-space:nowrap;">{pg_name}</div>',
             unsafe_allow_html=True)
     elif col.button(pg_name, use_container_width=True, key=f"nav_{pg_name}"):
         st.session_state.nav_page    = pg_name
@@ -1114,47 +1158,35 @@ def _nav_sec_label(text):
         unsafe_allow_html=True)
 
 
-_vsep = '<div style="width:1px;background:rgba(191,161,93,0.28);height:54px;margin:0 auto;"></div>'
-n0, _s1, n1, _s2, n2, _s3, n3, _s4, n4 = st.columns([2, 0.04, 3, 0.04, 2.5, 0.04, 1, 0.04, 1.5])
+# ── ROW 1: SECTION TABS (always one compact row) ─────────────────────────
+_SEC_LABELS = {
+    "Dashboard":         "Dashboard",
+    "Options Analytics": "Options",
+    "Stock Analytics":   "Stocks",
+    "Account":           "Account",
+    "Institutional":     "Institutional",
+}
+_sc = st.columns(len(_SECTION_PAGES))
+for _i, _sec in enumerate(_SECTION_PAGES):
+    if st.session_state.nav_section == _sec:
+        _sc[_i].markdown(
+            f'<div style="text-align:center;padding:5px 4px 4px;border-bottom:2px solid #bfa15d;'
+            f'color:#bfa15d;font-size:0.63rem;font-weight:700;letter-spacing:0.1em;'
+            f'text-transform:uppercase;white-space:nowrap;">{_SEC_LABELS[_sec]}</div>',
+            unsafe_allow_html=True)
+    elif _sc[_i].button(_SEC_LABELS[_sec], key=f"_sec_{_sec}", use_container_width=True):
+        st.session_state.nav_section = _sec
+        st.session_state.nav_page    = _SECTION_PAGES[_sec][0]
+        st.rerun()
 
-with n0:
-    _nav_sec_label("Dashboard")
-    d1, d2 = st.columns(2)
-    _nav_btn(d1, "Welcome")
-    _nav_btn(d2, "Market Overview")
+# ── ROW 2: SUB-PAGES (only shown when section has multiple pages) ─────────
+_active_pages = _SECTION_PAGES[st.session_state.nav_section]
+if len(_active_pages) > 1:
+    _pc = st.columns(len(_active_pages))
+    for _i, _pg in enumerate(_active_pages):
+        _nav_btn(_pc[_i], _pg)
 
-with _s1: st.markdown(_vsep, unsafe_allow_html=True)
-
-with n1:
-    _nav_sec_label("Options Analytics")
-    o1, o2, o3 = st.columns(3)
-    _nav_btn(o1, "Trade Advisor")
-    _nav_btn(o2, "Options Scanner")
-    _nav_btn(o3, "Options Watchlist")
-
-with _s2: st.markdown(_vsep, unsafe_allow_html=True)
-
-with n2:
-    _nav_sec_label("Stock Analytics")
-    s1, s2, s3, s4 = st.columns(4)
-    _nav_btn(s1, "Stock Advisor")
-    _nav_btn(s2, "Stock Scanner")
-    _nav_btn(s3, "Stock Watchlist")
-    _nav_btn(s4, "Backtest")
-
-with _s3: st.markdown(_vsep, unsafe_allow_html=True)
-
-with n3:
-    _nav_sec_label("Account")
-    _nav_btn(n3, "Positions")
-
-with _s4: st.markdown(_vsep, unsafe_allow_html=True)
-
-with n4:
-    _nav_sec_label("Institutional")
-    _nav_btn(n4, "ETF Builder")
-
-st.markdown('<hr style="margin:4px 0 14px;border:none;border-top:1px solid rgba(191,161,93,0.25);">', unsafe_allow_html=True)
+st.markdown('<hr style="margin:3px 0 12px;border:none;border-top:1px solid rgba(191,161,93,0.25);">', unsafe_allow_html=True)
 
 page    = st.session_state.nav_page
 section = st.session_state.nav_section
@@ -2274,23 +2306,35 @@ elif page == "Backtest":
                     _rg_grp = {}
                     for _t in _bt_res["trades"]: _rg_grp.setdefault(_t["Regime"], []).append(_t["P&L %"])
                     _rg_lines = [f"  {rg}: {len(ps)} trades, avg {sum(ps)/len(ps):+.2f}%" for rg, ps in _rg_grp.items()]
-                    _prompt = (f"Quantitative analyst reviewing a backtest for {_bt_par.get('ticker','N/A')}. "
-                               f"Direction: {_bt_par.get('direction','long')} | Holding: {_bt_par.get('holding',21)}d | "
-                               f"Target: {_bt_par.get('target',5)}% | SL: {_bt_par.get('sl',10)}%. "
-                               f"Results: {_s['Total Trades']} trades, win rate {_s['Win Rate']}%, "
-                               f"profit factor {_s['Profit Factor']}, total return {_s['Total Return %']:+.1f}%. "
-                               f"Regime: {'; '.join(_rg_lines)}. "
-                               f"Cover: (1) what numbers mean, (2) strategy performance verdict, (3) regime breakdown, "
-                               f"(4) one improvement suggestion. 4-5 paragraphs.")
+                    _prompt = (
+                        f"Backtest results for {_bt_par.get('ticker','N/A')}:\n"
+                        f"- Direction: {_bt_par.get('direction','long')} | Hold each trade for: {_bt_par.get('holding',21)} days\n"
+                        f"- Target gain: {_bt_par.get('target',5)}% | Stop loss: {_bt_par.get('sl',10)}%\n"
+                        f"- Total trades: {_s['Total Trades']} | Win rate: {_s['Win Rate']}%"
+                        f" | Profit factor: {_s['Profit Factor']} | Total return: {_s['Total Return %']:+.1f}%\n"
+                        f"- Regime breakdown: {'; '.join(_rg_lines)}\n\n"
+                        "Explain these results in 4 short bullets:\n"
+                        "• 📖 What a backtest is — explain it simply for a first-time investor\n"
+                        "• 📊 How did this strategy do? — interpret win rate, profit factor, and total return in plain English\n"
+                        "• 🧠 Regime breakdown — explain what each regime means and which performed best\n"
+                        "• 💡 One way to improve — a practical suggestion"
+                    )
                 else:
                     _folds = _wf_res["folds"]; _ra = _wf_res["regime_attribution"]
-                    _prompt = (f"Walk-forward review for {_wf_sym_d}. OOS Sharpe {_wf_res['agg_sharpe']:.2f}, "
-                               f"worst DD {_wf_res['worst_fold_dd']:+.1f}%, {_wf_res['n_folds']} folds, "
-                               f"{_wf_res['total_oos_trades']} total OOS trades. "
-                               f"Regime attribution: {'; '.join(f'{r["Regime"]} avg {r["Avg Return"]} edge {r["Edge"]}' for r in _ra)}. "
-                               f"Cover: (1) walk-forward concept, (2) robustness verdict, (3) regime attribution insight, "
-                               f"(4) what OOS Sharpe means, (5) one actionable recommendation. 4-6 paragraphs.")
-                _explain_text = _stream_ai_response(_prompt, max_tokens=700, placeholder=_explain_ph)
+                    _ra_str = "; ".join(f'{r["Regime"]} avg {r["Avg Return"]} edge {r["Edge"]}' for r in _ra)
+                    _prompt = (
+                        f"Walk-forward test results for {_wf_sym_d}:\n"
+                        f"- Out-of-sample Sharpe: {_wf_res['agg_sharpe']:.2f} | Worst drawdown: {_wf_res['worst_fold_dd']:+.1f}%\n"
+                        f"- Number of test periods (folds): {_wf_res['n_folds']} | Total trades tested: {_wf_res['total_oos_trades']}\n"
+                        f"- Regime results: {_ra_str}\n\n"
+                        "Explain in 5 short bullets:\n"
+                        "• 📖 What walk-forward testing means — explain it like you're talking to someone who's never heard of it\n"
+                        "• ✅ Is this strategy robust? — interpret the results honestly\n"
+                        "• 🧠 Regime breakdown — which market conditions did this strategy thrive or struggle in?\n"
+                        "• 📊 What the Sharpe Ratio means here — define it simply and say whether this number is good\n"
+                        "• 💡 One practical next step — what should the investor do with this information?"
+                    )
+                _explain_text = _stream_ai_response(_prompt, max_tokens=700, placeholder=_explain_ph, system=_ADVISOR_SYSTEM)
                 st.session_state["bt_ai_explanation"] = _explain_text
             elif "bt_ai_explanation" in st.session_state:
                 st.markdown(f'<div class="briefing-card">{st.session_state["bt_ai_explanation"]}</div>', unsafe_allow_html=True)
@@ -2974,3 +3018,4 @@ elif page == "ETF Builder":
 # END
 # ==========================================
 # streamlit run Institutional_MyQuant.py
+# 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
